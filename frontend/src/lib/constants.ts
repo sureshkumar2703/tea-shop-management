@@ -28,22 +28,5 @@ export const EXPENSE_CATEGORIES = [
 ] as const;
 
 export const DEMO_USERS = {
-  SUPER_ADMIN: {
-    email: 'superadmin@admin.com',
-    role: 'SUPER_ADMIN' as const,
-    name: 'Vikramaditya Singhania',
-    shopName: 'Global Platform Control'
-  },
-  ADMIN: {
-    email: 'owner@chaicraft.com',
-    role: 'ADMIN' as const,
-    name: 'Aarav Sharma',
-    shopName: 'Chai Craft Artisan Bar (Central)'
-  },
-  EMPLOYEE: {
-    email: 'cashier@chaicraft.com',
-    role: 'EMPLOYEE' as const,
-    name: 'Pooja Verma',
-    shopName: 'Chai Craft Artisan Bar (Central)'
-  }
+
 };

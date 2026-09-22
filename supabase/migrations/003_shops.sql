@@ -23,6 +23,27 @@ CREATE TABLE IF NOT EXISTS public.shops (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- Repair older shops tables before generating slugs.
+ALTER TABLE public.shops
+    ADD COLUMN IF NOT EXISTS name VARCHAR(255);
+
+ALTER TABLE public.shops
+    ADD COLUMN IF NOT EXISTS slug VARCHAR(100);
+
+ALTER TABLE public.shops
+    ADD COLUMN IF NOT EXISTS subscription_status shop_status DEFAULT 'TRIAL';
+
+-- Give existing shops a display name and stable slug before indexing.
+UPDATE public.shops
+SET name = COALESCE(NULLIF(TRIM(name), ''), 'Tea Shop ' || SUBSTRING(id::text FROM 1 FOR 8))
+WHERE name IS NULL OR TRIM(name) = '';
+
+UPDATE public.shops
+SET slug = LOWER(REGEXP_REPLACE(TRIM(name), '[^a-zA-Z0-9]+', '-', 'g')) || '-' || SUBSTRING(id::text FROM 1 FOR 8)
+WHERE slug IS NULL OR slug = '';
+
+CREATE UNIQUE INDEX IF NOT EXISTS uq_shops_slug ON public.shops (slug);
+
 -- Index for fast lookup by slug and status
 CREATE INDEX IF NOT EXISTS idx_shops_slug ON public.shops (slug);
 CREATE INDEX IF NOT EXISTS idx_shops_status ON public.shops (subscription_status);

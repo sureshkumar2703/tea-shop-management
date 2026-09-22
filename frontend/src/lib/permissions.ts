@@ -1,13 +1,13 @@
 import { UserRole } from "@/types";
 
 export const ROLE_PERMISSIONS = {
-  SUPER_ADMIN: {
+  ADMIN: {
     canManageAllShops: true,
     canManageAllUsers: true,
     canViewPlatformAnalytics: true,
     canAccessSettings: true,
   },
-  ADMIN: {
+  OWNER: {
     canManageProducts: true,
     canManageInventory: true,
     canManageEmployees: true,
@@ -35,9 +35,9 @@ export function hasPermission(role: UserRole | undefined, requiredRole: UserRole
 
 export function getDefaultDashboard(role: UserRole): string {
   switch (role) {
-    case "SUPER_ADMIN":
-      return "/super-admin/dashboard";
     case "ADMIN":
+      return "/super-admin/dashboard";
+    case "OWNER":
       return "/admin/dashboard";
     case "EMPLOYEE":
       return "/employee/billing";

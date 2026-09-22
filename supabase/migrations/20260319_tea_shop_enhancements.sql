@@ -81,11 +81,11 @@ ALTER TABLE public.datepays ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Shop staff view datepays"
 ON public.datepays FOR SELECT TO authenticated
-USING (shop_id = public.get_auth_user_shop_id() OR public.get_auth_user_role() = 'SUPER_ADMIN');
+USING (shop_id = public.get_auth_user_shop_id() OR public.get_auth_user_role() = 'ADMIN');
 
 CREATE POLICY "Admin manage datepays"
 ON public.datepays FOR ALL TO authenticated
 USING (
-    (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN'))
-    OR public.get_auth_user_role() = 'SUPER_ADMIN'
+    (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'))
+    OR public.get_auth_user_role() = 'ADMIN'
 );

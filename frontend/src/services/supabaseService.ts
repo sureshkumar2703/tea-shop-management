@@ -87,6 +87,10 @@ export const dataService = {
       shop_code: shopData.shop_code || `TEA-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
       tagline: shopData.tagline || "",
       address: shopData.address || "",
+      country: shopData.country || "India",
+      state: shopData.state || "",
+      city: shopData.city || "",
+      pincode: shopData.pincode || "",
       phone: shopData.phone || "",
       email: shopData.email || "",
       currency: "INR",
@@ -351,7 +355,7 @@ export const dataService = {
     try {
       const { data, error } = await supabase.from("profiles").insert([{
         ...adminData,
-        role: "ADMIN",
+        role: "OWNER",
       }]).select().single();
       if (!error && data) return data as Profile;
     } catch (e) {
@@ -367,7 +371,7 @@ export const dataService = {
       country: adminData.country || "India",
       state: adminData.state || "Karnataka",
       district: adminData.district || "",
-      role: "ADMIN",
+      role: "OWNER",
       is_active: true,
       monthly_salary: adminData.monthly_salary || 0,
       joining_date: new Date().toISOString().split("T")[0],

@@ -1,16 +1,14 @@
--- =================================================================
--- COMPLETE COMBINED MIGRATION SCRIPT FOR TEA SHOP MANAGEMENT
--- Run this script directly in the Supabase SQL Editor:
--- https://supabase.com/dashboard/project/gvpqxpgtpzznzpumsccq/sql/new
--- =================================================================
 
 -- 1. EXTENSIONS
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
+ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'OWNER';
+ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'ADMIN';
+ALTER TYPE public.user_role ADD VALUE IF NOT EXISTS 'EMPLOYEE';
 -- 2. ENUMS
 DO $$ BEGIN
-    CREATE TYPE user_role AS ENUM ('SUPER_ADMIN', 'ADMIN', 'EMPLOYEE');
+    CREATE TYPE user_role AS ENUM ('OWNER', 'ADMIN', 'EMPLOYEE');
 EXCEPTION WHEN duplicate_object THEN null; END $$;
 
 DO $$ BEGIN
@@ -443,12 +441,16 @@ CREATE TABLE IF NOT EXISTS public.audit_logs (
 -- 20. ROW LEVEL SECURITY (RLS)
 CREATE OR REPLACE FUNCTION public.get_auth_user_role()
 RETURNS user_role AS $$
-    SELECT role FROM public.profiles WHERE id = auth.uid();
+    SELECT role FROM public.users
+    WHERE LOWER(email) = LOWER(auth.jwt() ->> 'email')
+    LIMIT 1;
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 CREATE OR REPLACE FUNCTION public.get_auth_user_shop_id()
 RETURNS UUID AS $$
-    SELECT shop_id FROM public.profiles WHERE id = auth.uid();
+    SELECT shop_id FROM public.users
+    WHERE LOWER(email) = LOWER(auth.jwt() ->> 'email')
+    LIMIT 1;
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
 ALTER TABLE public.shops ENABLE ROW LEVEL SECURITY;
@@ -475,35 +477,35 @@ ALTER TABLE public.datepays ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.audit_logs ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Super admins full access shops" ON public.shops FOR ALL TO authenticated USING (public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Super admins full access shops" ON public.shops FOR ALL TO authenticated USING (public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Shop members view shop" ON public.shops FOR SELECT TO authenticated USING (id = public.get_auth_user_shop_id());
 CREATE POLICY "Admin update own shop" ON public.shops FOR UPDATE TO authenticated USING (id = public.get_auth_user_shop_id() AND public.get_auth_user_role() = 'ADMIN');
 
-CREATE POLICY "Super admins manage profiles" ON public.profiles FOR ALL TO authenticated USING (public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Super admins manage profiles" ON public.profiles FOR ALL TO authenticated USING (public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Users read profiles" ON public.profiles FOR SELECT TO authenticated USING (id = auth.uid() OR shop_id = public.get_auth_user_shop_id());
 CREATE POLICY "Admin manage shop profiles" ON public.profiles FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "User update own profile" ON public.profiles FOR UPDATE TO authenticated USING (id = auth.uid());
 
-CREATE POLICY "Super admin categories" ON public.categories FOR ALL TO authenticated USING (public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Super admin categories" ON public.categories FOR ALL TO authenticated USING (public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Shop members categories" ON public.categories FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id());
 CREATE POLICY "Admin categories" ON public.categories FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() = 'ADMIN');
 
-CREATE POLICY "Super admin products" ON public.products FOR ALL TO authenticated USING (public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Super admin products" ON public.products FOR ALL TO authenticated USING (public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Shop members products" ON public.products FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id());
 CREATE POLICY "Admin products" ON public.products FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() = 'ADMIN');
 
-CREATE POLICY "Super admin variants" ON public.product_variants FOR ALL TO authenticated USING (public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Super admin variants" ON public.product_variants FOR ALL TO authenticated USING (public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Shop members variants" ON public.product_variants FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id());
 CREATE POLICY "Admin variants" ON public.product_variants FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() = 'ADMIN');
 
-CREATE POLICY "Super admin addons" ON public.addons FOR ALL TO authenticated USING (public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Super admin addons" ON public.addons FOR ALL TO authenticated USING (public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Shop members addons" ON public.addons FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id());
 CREATE POLICY "Admin addons" ON public.addons FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() = 'ADMIN');
 
 CREATE POLICY "Staff inventory read" ON public.inventory_items FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id());
-CREATE POLICY "Admin inventory write" ON public.inventory_items FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN'));
+CREATE POLICY "Admin inventory write" ON public.inventory_items FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'));
 
-CREATE POLICY "Admin purchases write" ON public.purchases FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN'));
+CREATE POLICY "Admin purchases write" ON public.purchases FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'));
 CREATE POLICY "Admin purchases read" ON public.purchases FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id());
 
 CREATE POLICY "Staff orders" ON public.orders FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id());
@@ -512,13 +514,13 @@ CREATE POLICY "Staff order addons" ON public.order_item_addons FOR ALL TO authen
 
 CREATE POLICY "Staff registers" ON public.cash_registers FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id());
 CREATE POLICY "Staff attendance" ON public.attendance FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id());
-CREATE POLICY "Admin expenses" ON public.expenses FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN'));
-CREATE POLICY "Admin salaries" ON public.salaries FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN'));
+CREATE POLICY "Admin expenses" ON public.expenses FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'));
+CREATE POLICY "Admin salaries" ON public.salaries FOR ALL TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'));
 CREATE POLICY "Employee salaries" ON public.salaries FOR SELECT TO authenticated USING (employee_id = auth.uid());
-CREATE POLICY "Staff datepays view" ON public.datepays FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id() OR public.get_auth_user_role() = 'SUPER_ADMIN');
-CREATE POLICY "Admin datepays manage" ON public.datepays FOR ALL TO authenticated USING ((shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN')) OR public.get_auth_user_role() = 'SUPER_ADMIN');
+CREATE POLICY "Staff datepays view" ON public.datepays FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id() OR public.get_auth_user_role() = 'ADMIN');
+CREATE POLICY "Admin datepays manage" ON public.datepays FOR ALL TO authenticated USING ((shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN')) OR public.get_auth_user_role() = 'ADMIN');
 CREATE POLICY "Staff notifications" ON public.notifications FOR ALL TO authenticated USING (user_id = auth.uid() OR shop_id = public.get_auth_user_shop_id());
-CREATE POLICY "Admin audit logs" ON public.audit_logs FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('SUPER_ADMIN', 'ADMIN'));
+CREATE POLICY "Admin audit logs" ON public.audit_logs FOR SELECT TO authenticated USING (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'));
 
 -- =====================================================
 -- 21. STORAGE BUCKET: Tea-Shop-Images
@@ -577,3 +579,92 @@ CREATE POLICY "Anon Upload to Tea-Shop-Images"
 ON storage.objects FOR INSERT
 TO anon
 WITH CHECK (bucket_id = 'Tea-Shop-Images');
+
+-- =====================================================
+-- 23. CREATE USERS ROW WHEN AUTH USER SIGNS UP
+-- =====================================================
+
+CREATE OR REPLACE FUNCTION public.handle_new_auth_user()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+    INSERT INTO public.users (shop_id, name, email, phone, role, salary, is_active)
+    VALUES (
+        NULL,
+        COALESCE(NEW.raw_user_meta_data ->> 'name', split_part(NEW.email, '@', 1)),
+        NEW.email,
+        NULLIF(NEW.raw_user_meta_data ->> 'phone', ''),
+        'ADMIN'::user_role,
+        0,
+        TRUE
+    );
+
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS on_auth_user_created_users ON auth.users;
+CREATE TRIGGER on_auth_user_created_users
+    AFTER INSERT ON auth.users
+    FOR EACH ROW EXECUTE FUNCTION public.handle_new_auth_user();
+
+-- =====================================================
+-- 24. USERS READ POLICY AND EXISTING AUTH ACCOUNT REPAIR
+-- =====================================================
+
+DROP POLICY IF EXISTS "Users read own users row" ON public.users;
+CREATE POLICY "Users read own users row"
+ON public.users FOR SELECT
+TO authenticated
+USING (LOWER(email) = LOWER(auth.jwt() ->> 'email'));
+
+INSERT INTO public.users (shop_id, name, email, phone, role, salary, is_active)
+SELECT
+    NULL,
+    COALESCE(au.raw_user_meta_data ->> 'name', split_part(au.email, '@', 1)),
+    au.email,
+    NULLIF(au.raw_user_meta_data ->> 'phone', ''),
+    'ADMIN'::user_role,
+    0,
+    TRUE
+FROM auth.users AS au
+WHERE NOT EXISTS (
+    SELECT 1
+    FROM public.users AS existing_user
+    WHERE LOWER(existing_user.email) = LOWER(au.email)
+);
+
+-- =====================================================
+-- 25. SHOP LOCATION, STATUS, AND MANAGEMENT POLICIES
+-- =====================================================
+
+ALTER TABLE public.shops
+    ADD COLUMN IF NOT EXISTS country VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS state VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS city VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS pincode VARCHAR(20),
+    ADD COLUMN IF NOT EXISTS is_active BOOLEAN NOT NULL DEFAULT TRUE;
+
+ALTER TABLE public.shops ALTER COLUMN is_active SET DEFAULT TRUE;
+ALTER TABLE public.shops ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Platform admins create shops" ON public.shops;
+CREATE POLICY "Platform admins create shops"
+ON public.shops FOR INSERT
+TO authenticated
+WITH CHECK (public.get_auth_user_role() = 'ADMIN');
+
+DROP POLICY IF EXISTS "Platform admins manage shops" ON public.shops;
+CREATE POLICY "Platform admins manage shops"
+ON public.shops FOR UPDATE
+TO authenticated
+USING (public.get_auth_user_role() = 'ADMIN')
+WITH CHECK (public.get_auth_user_role() = 'ADMIN');
+
+DROP POLICY IF EXISTS "Platform admins delete shops" ON public.shops;
+CREATE POLICY "Platform admins delete shops"
+ON public.shops FOR DELETE
+TO authenticated
+USING (public.get_auth_user_role() = 'ADMIN');

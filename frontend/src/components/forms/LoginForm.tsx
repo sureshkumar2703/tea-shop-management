@@ -42,7 +42,7 @@ export const LoginForm: React.FC = () => {
       // Read the fresh role from store after login
       const state = useAuthStore.getState();
       if (state.role) {
-        navigate(getDefaultDashboard(state.role));
+        navigate(getDefaultDashboard(state.role), { replace: true });
       }
     }
   };

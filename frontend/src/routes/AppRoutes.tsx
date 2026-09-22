@@ -1,5 +1,5 @@
-import React from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import React, { useEffect } from "react";
+import { Routes, Route, Navigate, useLocation, useNavigate } from "react-router-dom";
 import { ProtectedRoute } from "./ProtectedRoute";
 import { RoleRoute } from "./RoleRoute";
 import { useAuthStore } from "@/stores/authStore";
@@ -56,11 +56,28 @@ import Profile from "@/pages/Employee/Profile";
 
 export const AppRoutes: React.FC = () => {
   const { role, user } = useAuthStore();
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (user && role && location.pathname === "/login") {
+      navigate(getDefaultDashboard(role), { replace: true });
+    }
+  }, [location.pathname, navigate, role, user]);
 
   return (
     <Routes>
       {/* Public Routes */}
-      <Route path="/login" element={<Login />} />
+      <Route
+        path="/login"
+        element={
+          user && role ? (
+            <Navigate to={getDefaultDashboard(role)} replace />
+          ) : (
+            <Login />
+          )
+        }
+      />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/setup" element={<CreateSuperAdmin />} />
@@ -68,7 +85,7 @@ export const AppRoutes: React.FC = () => {
       {/* Protected Routes */}
       <Route element={<ProtectedRoute />}>
         {/* Super Admin Tier */}
-        <Route element={<RoleRoute allowedRoles={["SUPER_ADMIN"]} />}>
+        <Route element={<RoleRoute allowedRoles={["ADMIN"]} />}>
           <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
           <Route path="/super-admin/shops" element={<ShopList />} />
           <Route path="/super-admin/shops/new" element={<CreateShop />} />
@@ -81,7 +98,7 @@ export const AppRoutes: React.FC = () => {
         </Route>
 
         {/* Admin / Shop Owner Tier */}
-        <Route element={<RoleRoute allowedRoles={["ADMIN", "SUPER_ADMIN"]} />}>
+        <Route element={<RoleRoute allowedRoles={["OWNER"]} />}>
           <Route path="/admin/dashboard" element={<AdminDashboard />} />
           <Route path="/admin/billing" element={<BillingPOS />} />
           <Route path="/admin/billing/history" element={<OrderHistory />} />
@@ -107,7 +124,7 @@ export const AppRoutes: React.FC = () => {
         </Route>
 
         {/* Employee / Barista Tier */}
-        <Route element={<RoleRoute allowedRoles={["EMPLOYEE", "ADMIN", "SUPER_ADMIN"]} />}>
+        <Route element={<RoleRoute allowedRoles={["EMPLOYEE", "OWNER", "ADMIN"]} />}>
           <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
           <Route path="/employee/billing" element={<EmployeePOS />} />
           <Route path="/employee/cash" element={<ShiftCash />} />
@@ -124,7 +141,7 @@ export const AppRoutes: React.FC = () => {
           user && role ? (
             <Navigate to={getDefaultDashboard(role)} replace />
           ) : (
-            <Navigate to="/login" replace />
+            <Navigate to="/setup" replace />
           )
         }
       />

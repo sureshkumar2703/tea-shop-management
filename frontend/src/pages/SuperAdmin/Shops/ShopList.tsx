@@ -3,16 +3,15 @@ import { SuperAdminLayout } from "@/layouts/SuperAdminLayout";
 import { DataTable } from "@/components/tables/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { CreateShopModal } from "@/components/modals/CreateShopModal";
 import { dataService } from "@/services/supabaseService";
 import { Shop } from "@/types";
 import { formatDate } from "@/lib/utils";
 import { Plus, Store, ExternalLink } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export const ShopList: React.FC = () => {
+  const navigate = useNavigate();
   const [shops, setShops] = useState<Shop[]>([]);
-  const [modalOpen, setModalOpen] = useState(false);
 
   useEffect(() => {
     dataService.getShops().then(setShops);
@@ -90,7 +89,7 @@ export const ShopList: React.FC = () => {
               Manage multi-tenant tea house establishments and subscription terms
             </p>
           </div>
-          <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={() => setModalOpen(true)}>
+          <Button variant="primary" icon={<Plus className="w-4 h-4" />} onClick={() => navigate("/super-admin/shops/new")}>
             Provision Store
           </Button>
         </div>
@@ -103,11 +102,6 @@ export const ShopList: React.FC = () => {
         />
       </div>
 
-      <CreateShopModal
-        isOpen={modalOpen}
-        onClose={() => setModalOpen(false)}
-        onSuccess={(s) => setShops([s, ...shops])}
-      />
     </SuperAdminLayout>
   );
 };

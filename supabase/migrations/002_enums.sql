@@ -2,7 +2,7 @@
 -- Create custom ENUM types for Tea Shop Management
 
 DO $$ BEGIN
-    CREATE TYPE user_role AS ENUM ('SUPER_ADMIN', 'ADMIN', 'EMPLOYEE');
+    CREATE TYPE user_role AS ENUM ('OWNER', 'ADMIN', 'EMPLOYEE');
 EXCEPTION
     WHEN duplicate_object THEN null;
 END $$;

@@ -1,4 +1,4 @@
-export type UserRole = 'SUPER_ADMIN' | 'ADMIN' | 'EMPLOYEE';
+export type UserRole = 'OWNER' | 'ADMIN' | 'EMPLOYEE';
 export type ShopStatus = 'ACTIVE' | 'EXPIRED' | 'TRIAL' | 'SUSPENDED';
 export type PaymentMethod = 'CASH' | 'UPI_QR' | 'CARD' | 'CREDIT' | 'SPLIT';
 export type OrderStatus = 'COMPLETED' | 'CANCELLED' | 'REFUNDED' | 'PENDING';
@@ -13,6 +13,10 @@ export interface Shop {
   shop_code?: string;
   tagline?: string;
   address?: string;
+  country?: string;
+  state?: string;
+  city?: string;
+  pincode?: string;
   phone?: string;
   email?: string;
   gst_number?: string;

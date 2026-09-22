@@ -52,12 +52,14 @@ export const CreateSuperAdmin: React.FC = () => {
   };
 
   const validate = (): string | null => {
+    const email = form.email.trim().toLowerCase();
+
     if (!form.secretKey.trim()) return "Please enter the setup secret key.";
     if (form.secretKey.trim() !== SETUP_SECRET)
       return "Invalid setup secret key. Contact your system administrator.";
     if (!form.fullName.trim()) return "Full name is required.";
-    if (!form.email.trim()) return "Email address is required.";
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email))
+    if (!email) return "Email address is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))
       return "Please enter a valid email address.";
     if (form.password.length < 8)
       return "Password must be at least 8 characters long.";
@@ -78,20 +80,26 @@ export const CreateSuperAdmin: React.FC = () => {
 
     setIsLoading(true);
     try {
+      const email = form.email.trim().toLowerCase();
+
       // Step 1: Create the user in Supabase Auth
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
-        email: form.email.trim().toLowerCase(),
+        email,
         password: form.password,
         options: {
           data: {
             name: form.fullName.trim(),
-            role: "SUPER_ADMIN",
+            role: "ADMIN",
           },
         },
       });
 
       if (signUpError) {
-        setError(signUpError.message);
+        setError(
+          signUpError.code === "over_email_send_rate_limit"
+            ? "Supabase has temporarily limited email sending. Wait a while before trying again, or configure a custom SMTP provider in Supabase Dashboard > Authentication > SMTP Settings."
+            : signUpError.message
+        );
         setIsLoading(false);
         return;
       }
@@ -102,30 +110,7 @@ export const CreateSuperAdmin: React.FC = () => {
         return;
       }
 
-      // Step 2: Insert row into the `users` table
-      const { error: profileError } = await supabase.from("users").insert([
-        {
-          shop_id: null,                               // SuperAdmin has no shop
-          name: form.fullName.trim(),                  // DB column: name
-          email: form.email.trim().toLowerCase(),
-          phone: form.phone.trim() || null,
-          role: "SUPER_ADMIN",
-          salary: 0,                                   // DB column: salary
-          is_active: true,
-        },
-      ]);
-
-      if (profileError) {
-        // Rollback: delete the auth user if profile insert failed
-        await supabase.auth.admin?.deleteUser(authData.user.id).catch(() => {});
-        setError(
-          `User table insert failed: ${profileError.message}.`
-        );
-        setIsLoading(false);
-        return;
-      }
-
-      // Success!
+      // The database Auth trigger creates the users row server-side.
       setSuccess(true);
     } catch (e: any) {
       setError(e.message || "An unexpected error occurred.");
@@ -161,7 +146,7 @@ export const CreateSuperAdmin: React.FC = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Role:</span>
-              <span className="font-bold text-purple-600">SUPER_ADMIN</span>
+              <span className="font-bold text-purple-600">ADMIN</span>
             </div>
           </div>
           <p className="text-xs text-slate-400">
@@ -381,7 +366,7 @@ export const CreateSuperAdmin: React.FC = () => {
           </p>
           <ol className="list-decimal list-inside space-y-1 pl-1">
             <li>Creates a user in <strong>Supabase Authentication</strong> with email & password</li>
-            <li>Inserts a row in the <strong>profiles</strong> table with <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-purple-600">role = SUPER_ADMIN</code></li>
+            <li>Inserts a row in the <strong>users</strong> table with <code className="bg-slate-100 dark:bg-slate-800 px-1 rounded text-purple-600">role = ADMIN</code></li>
             <li>Redirects you to login to sign in with the new credentials</li>
           </ol>
         </div>

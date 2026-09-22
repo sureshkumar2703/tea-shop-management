@@ -5,16 +5,15 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/tables/DataTable";
-import { CreateShopModal } from "@/components/modals/CreateShopModal";
 import { dataService } from "@/services/supabaseService";
 import { Shop } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import { Store, Users, CreditCard, AlertTriangle, Plus, ArrowRight, ShieldCheck, Database } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 export const SuperAdminDashboard: React.FC = () => {
+  const navigate = useNavigate();
   const [shops, setShops] = useState<Shop[]>([]);
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
     dataService.getShops().then(setShops);
@@ -98,7 +97,7 @@ export const SuperAdminDashboard: React.FC = () => {
             <Button
               variant="primary"
               icon={<Plus className="w-4 h-4" />}
-              onClick={() => setIsCreateModalOpen(true)}
+              onClick={() => navigate("/super-admin/shops/new")}
             >
               Add New Shop
             </Button>
@@ -186,11 +185,6 @@ export const SuperAdminDashboard: React.FC = () => {
         </Card>
       </div>
 
-      <CreateShopModal
-        isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={(newShop) => setShops([newShop, ...shops])}
-      />
     </SuperAdminLayout>
   );
 };

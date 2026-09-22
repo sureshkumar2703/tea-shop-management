@@ -97,8 +97,8 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
               className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100"
             >
               <option value="EMPLOYEE">Employee (Barista / POS Cashier)</option>
-              <option value="ADMIN">Shop Admin / Store Owner</option>
-              <option value="SUPER_ADMIN">Super Admin (Platform Owner)</option>
+              <option value="OWNER">Shop Admin / Store Owner</option>
+              <option value="ADMIN">Super Admin (Platform Owner)</option>
             </select>
           </div>
 

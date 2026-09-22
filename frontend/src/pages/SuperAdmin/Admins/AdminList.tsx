@@ -15,7 +15,7 @@ export const SuperAdminAdminList: React.FC = () => {
 
   useEffect(() => {
     dataService.getEmployees().then((users) => {
-      setAdmins(users.filter((u) => u.role === "ADMIN" || u.role === "SUPER_ADMIN"));
+      setAdmins(users.filter((u) => u.role === "ADMIN" || u.role === "OWNER"));
     });
     dataService.getShops().then(setShops);
   }, []);
@@ -35,7 +35,7 @@ export const SuperAdminAdminList: React.FC = () => {
       key: "role",
       header: "Access Level",
       render: (u: Profile) => (
-        <Badge variant={u.role === "SUPER_ADMIN" ? "amber" : "info"}>
+        <Badge variant={u.role === "ADMIN" ? "amber" : "info"}>
           {u.role.replace("_", " ")}
         </Badge>
       ),

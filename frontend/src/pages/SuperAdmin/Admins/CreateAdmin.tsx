@@ -66,7 +66,7 @@ export const SuperAdminCreateAdmin: React.FC = () => {
       country,
       state,
       district,
-      role: "ADMIN",
+      role: "OWNER",
     });
 
     setIsLoading(false);

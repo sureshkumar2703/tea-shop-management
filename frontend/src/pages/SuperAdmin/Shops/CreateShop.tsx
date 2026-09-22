@@ -5,9 +5,12 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
+import { FileUpload } from "@/components/ui/FileUpload";
 import { dataService } from "@/services/supabaseService";
 import { Shop } from "@/types";
-import { ArrowLeft, RefreshCw, QrCode, Sparkles, CheckCircle2, UserPlus, Store } from "lucide-react";
+import { Country, State, City } from "country-state-city";
+import { getCountryCallingCode, isValidPhoneNumber } from "libphonenumber-js";
+import { ArrowLeft, RefreshCw, QrCode, CheckCircle2, UserPlus, Store } from "lucide-react";
 
 export const CreateShop: React.FC = () => {
   const navigate = useNavigate();
@@ -27,6 +30,12 @@ export const CreateShop: React.FC = () => {
   const [tagline, setTagline] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [countryCode, setCountryCode] = useState("IN");
+  const [countryName, setCountryName] = useState("India");
+  const [stateCode, setStateCode] = useState("");
+  const [stateName, setStateName] = useState("");
+  const [city, setCity] = useState("");
+  const [pincode, setPincode] = useState("");
   const [email, setEmail] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [gpayQrUrl, setGpayQrUrl] = useState("");
@@ -37,15 +46,36 @@ export const CreateShop: React.FC = () => {
   const [isLifetime, setIsLifetime] = useState(false);
   const [gstNumber, setGstNumber] = useState("");
   const [taxRate, setTaxRate] = useState("5.0");
+  const [isActive, setIsActive] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
+  const [formError, setFormError] = useState("");
 
   // Success Modal state to prompt Admin creation
   const [createdShop, setCreatedShop] = useState<Shop | null>(null);
   const [successModalOpen, setSuccessModalOpen] = useState(false);
 
+  const countries = Country.getAllCountries();
+  const states = State.getStatesOfCountry(countryCode);
+  const cities = stateCode ? City.getCitiesOfState(countryCode, stateCode) : [];
+  const callingCode = countryCode
+    ? getCountryCallingCode(countryCode as Parameters<typeof getCountryCallingCode>[0])
+    : "";
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !shopCode) return;
+    setFormError("");
+    if (!name || !shopCode || !address || !countryCode || !stateCode || !city || !pincode) {
+      setFormError("Please complete all required shop and address fields.");
+      return;
+    }
+    if (!isValidPhoneNumber(phone, countryCode as Parameters<typeof isValidPhoneNumber>[1])) {
+      setFormError("Please enter a valid phone number for the selected country.");
+      return;
+    }
+    if (!isLifetime && !expiryDate) {
+      setFormError("Please select an expiry date or choose Lifetime.");
+      return;
+    }
     setIsLoading(true);
 
     const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
@@ -63,6 +93,10 @@ export const CreateShop: React.FC = () => {
       shop_code: shopCode,
       tagline,
       address,
+      country: countries.find((item) => item.isoCode === countryCode)?.name || countryCode,
+      state: stateName,
+      city,
+      pincode,
       phone,
       email,
       logo_url: imageUrl,
@@ -73,6 +107,7 @@ export const CreateShop: React.FC = () => {
       gst_number: gstNumber,
       tax_rate: parseFloat(taxRate) || 5.0,
       subscription_status: "ACTIVE",
+      is_active: isActive,
     });
 
     setIsLoading(false);
@@ -100,60 +135,30 @@ export const CreateShop: React.FC = () => {
           </p>
         </div>
 
+        {formError && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{formError}</div>}
+
         <Card className="p-6">
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Auto-generated Shop Code banner */}
             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
               <div>
-                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-700 dark:text-amber-400 block">
-                  Unique Shop Code (Auto-Generated)
-                </span>
-                <span className="text-lg font-mono font-black text-amber-900 dark:text-amber-200">
-                  {shopCode}
-                </span>
-                <p className="text-[11px] text-amber-700/80 dark:text-amber-300/80">
-                  This code will automatically link to the shop owner and employees
-                </p>
+                <span className="text-[10px] font-bold tracking-wider uppercase text-amber-700 dark:text-amber-400 block">Unique Shop Code (Auto-Generated)</span>
+                <span className="text-lg font-mono font-black text-amber-900 dark:text-amber-200">{shopCode}</span>
               </div>
-              <Button
-                type="button"
-                size="sm"
-                variant="secondary"
-                icon={<RefreshCw className="w-3.5 h-3.5" />}
-                onClick={() => setShopCode(generateShopCode())}
-              >
-                Regenerate Code
-              </Button>
+              <Button type="button" size="sm" variant="secondary" icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={() => setShopCode(generateShopCode())}>Regenerate Code</Button>
             </div>
 
-            {/* Shop Core Details */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <Input
-                label="Shop Name *"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Chai Craft Indiranagar"
-                required
-              />
-              <Input
-                label="Shop Tagline / Slogan"
-                value={tagline}
-                onChange={(e) => setTagline(e.target.value)}
-                placeholder="e.g. Authentic Handcrafted Kulhad Chai"
-              />
-            </div>
-
-            {/* Shop Image / Logo URL */}
-            <Input
-              label="Shop Image or Logo URL"
+            <FileUpload
+              label="Shop Image / Logo"
+              folder="shops"
+              accept="image/*"
               value={imageUrl}
-              onChange={(e) => setImageUrl(e.target.value)}
-              placeholder="https://images.unsplash.com/photo-1544787219-7f47ccb76574"
+              onChange={setImageUrl}
+              helperText="Upload a PNG, JPG, or WebP image."
             />
 
             {/* Store Address & Contact */}
             <Input
-              label="Store Address *"
+              label="Address *"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
               placeholder="Shop #12, 100ft Road, HAL 2nd Stage, Indiranagar, Bangalore"
@@ -162,10 +167,71 @@ export const CreateShop: React.FC = () => {
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <Input
-                label="Phone Number *"
+                label="Country *"
+                list="shop-countries"
+                value={countryName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const selected = countries.find((item) => item.name.toLowerCase() === value.toLowerCase() || item.isoCode.toLowerCase() === value.toLowerCase());
+                  setCountryName(value);
+                  setCountryCode(selected?.isoCode || "");
+                  setStateCode("");
+                  setStateName("");
+                  setCity("");
+                  setPhone("");
+                }}
+                placeholder="Type or select country"
+                required
+              />
+              <datalist id="shop-countries">
+                {countries.map((item) => <option key={item.isoCode} value={item.name} />)}
+              </datalist>
+              <Input
+                label="State *"
+                list="shop-states"
+                value={stateName}
+                onChange={(e) => {
+                  const value = e.target.value;
+                  const selected = states.find((item) => item.name.toLowerCase() === value.toLowerCase() || item.isoCode.toLowerCase() === value.toLowerCase());
+                  setStateCode(selected?.isoCode || "");
+                  setStateName(value);
+                  setCity("");
+                }}
+                placeholder={countryCode ? "Type or select state" : "Select a country first"}
+                disabled={!countryCode}
+                required
+              />
+              <datalist id="shop-states">
+                {states.map((item) => <option key={item.isoCode} value={item.name} />)}
+              </datalist>
+              <Input
+                label="City *"
+                list="shop-cities"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+                placeholder={stateCode ? "Type or select city" : "Select a state first"}
+                disabled={!stateCode}
+                required
+              />
+              <datalist id="shop-cities">
+                {cities.map((item) => <option key={item.name} value={item.name} />)}
+              </datalist>
+              <Input
+                label="Pincode *"
+                value={pincode}
+                onChange={(e) => setPincode(e.target.value.replace(/[^0-9A-Za-z -]/g, ""))}
+                placeholder="560038"
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <Input
+                label={`Phone Number *${callingCode ? ` (+${callingCode})` : ""}`}
                 value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="+91 98765 00000"
+                onChange={(e) => setPhone(e.target.value.replace(/[^0-9+ ()-]/g, ""))}
+                placeholder={countryCode === "IN" ? "9876500000" : callingCode ? `+${callingCode} 555 000 0000` : "Select a country first"}
+                maxLength={countryCode === "IN" ? 10 : undefined}
                 required
               />
               <Input
@@ -186,11 +252,6 @@ export const CreateShop: React.FC = () => {
                 </label>
                 <span className="text-[10px] text-slate-400">Used during POS billing</span>
               </div>
-              <Input
-                value={gpayQrUrl}
-                onChange={(e) => setGpayQrUrl(e.target.value)}
-                placeholder="Paste GPay QR Image URL (or leave blank to auto-generate from store name)"
-              />
               {gpayQrUrl && (
                 <div className="flex items-center gap-3 pt-2">
                   <img
@@ -204,6 +265,14 @@ export const CreateShop: React.FC = () => {
                   </div>
                 </div>
               )}
+              <FileUpload
+                label="GPay QR Image"
+                folder="shops"
+                accept="image/*"
+                value={gpayQrUrl}
+                onChange={setGpayQrUrl}
+                helperText="Upload the QR image customers will scan."
+              />
             </div>
 
             {/* License Duration: Start date, Expiry date or Lifetime */}
@@ -240,6 +309,18 @@ export const CreateShop: React.FC = () => {
                   required={!isLifetime}
                 />
               </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">Status *</label>
+              <select
+                value={isActive ? "ACTIVE" : "INACTIVE"}
+                onChange={(e) => setIsActive(e.target.value === "ACTIVE")}
+                className="w-full sm:w-1/2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm"
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </select>
             </div>
 
             {/* Tax & GSTIN */}
