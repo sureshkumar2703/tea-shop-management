@@ -19,6 +19,8 @@ import ShopDetails from "@/pages/SuperAdmin/Shops/ShopDetails";
 import RenewShop from "@/pages/SuperAdmin/Shops/RenewShop";
 import SuperAdminAdminList from "@/pages/SuperAdmin/Admins/AdminList";
 import SuperAdminCreateAdmin from "@/pages/SuperAdmin/Admins/CreateAdmin";
+import SuperAdminSuperAdminList from "@/pages/SuperAdmin/SuperAdmins/SuperAdminList";
+import CreateSuperAdminPage from "@/pages/SuperAdmin/SuperAdmins/CreateSuperAdmin";
 import SuperAdminReports from "@/pages/SuperAdmin/Reports";
 import SuperAdminSettings from "@/pages/SuperAdmin/Settings";
 
@@ -93,6 +95,8 @@ export const AppRoutes: React.FC = () => {
           <Route path="/super-admin/shops/:id/renew" element={<RenewShop />} />
           <Route path="/super-admin/admins" element={<SuperAdminAdminList />} />
           <Route path="/super-admin/admins/new" element={<SuperAdminCreateAdmin />} />
+          <Route path="/super-admin/super-admins" element={<SuperAdminSuperAdminList />} />
+          <Route path="/super-admin/super-admins/new" element={<CreateSuperAdminPage />} />
           <Route path="/super-admin/reports" element={<SuperAdminReports />} />
           <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
         </Route>

@@ -11,6 +11,7 @@ import {
   Salary,
   Attendance,
   Profile,
+  UserRole,
   Datepay,
   PaymentMethod,
 } from "@/types";
@@ -66,7 +67,36 @@ export const dataService = {
   async getShops(): Promise<Shop[]> {
     try {
       const { data, error } = await supabase.from("shops").select("*").order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) return data as Shop[];
+      if (!error && data && data.length > 0) {
+        return data.map((row: any) => ({
+          id: row.id,
+          name: row.name || row.shop_name || "Artisan Chai Store",
+          slug: row.slug || `shop-${row.id}`,
+          shop_code: row.shop_code || `TEA-${String(row.id).slice(0, 5).toUpperCase()}`,
+          tagline: row.tagline || "",
+          address: row.address || "",
+          country: row.country || "India",
+          state: row.state || "",
+          city: row.city || "",
+          pincode: row.pincode || "",
+          phone: row.phone || "",
+          email: row.email || "",
+          currency: row.currency || "INR",
+          tax_rate: row.tax_rate ?? 5.0,
+          subscription_status: row.subscription_status || "ACTIVE",
+          subscription_start_date: row.subscription_start_date || row.start_date || row.created_at,
+          subscription_end_date: row.subscription_end_date || row.expiry_date,
+          start_date: row.start_date || row.created_at?.split("T")[0],
+          expiry_date: row.expiry_date,
+          is_lifetime: row.is_lifetime || false,
+          logo_url: row.logo_url || row.shop_image || "",
+          gpay_qr_url: row.gpay_qr_url || row.gpay_qr_image || "",
+          gst_number: row.gst_number || "",
+          is_active: row.is_active ?? true,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        })) as Shop[];
+      }
     } catch (e) {
       console.warn("Supabase query fallback to mock", e);
     }
@@ -74,16 +104,78 @@ export const dataService = {
   },
 
   async createShop(shopData: Partial<Shop>): Promise<Shop> {
+    const slug = (shopData.slug || shopData.name || `shop-${Date.now()}`)
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    const payload: Record<string, any> = {
+      name: shopData.name,
+      shop_name: shopData.name,
+      slug: slug,
+      shop_code: shopData.shop_code,
+      tagline: shopData.tagline || "",
+      address: shopData.address || "",
+      country: shopData.country || "India",
+      state: shopData.state || "",
+      city: shopData.city || "",
+      pincode: shopData.pincode || "",
+      phone: shopData.phone || "",
+      email: shopData.email || "",
+      currency: "INR",
+      tax_rate: shopData.tax_rate || 5.0,
+      subscription_status: shopData.subscription_status || "ACTIVE",
+      start_date: shopData.start_date || new Date().toISOString().split("T")[0],
+      expiry_date: shopData.is_lifetime ? null : shopData.expiry_date,
+      is_lifetime: shopData.is_lifetime || false,
+      logo_url: shopData.logo_url || "",
+      shop_image: shopData.logo_url || "",
+      gpay_qr_url: shopData.gpay_qr_url || "",
+      gpay_qr_image: shopData.gpay_qr_url || "",
+      gst_number: shopData.gst_number || "",
+      is_active: shopData.is_active !== undefined ? shopData.is_active : true,
+    };
+
     try {
-      const { data, error } = await supabase.from("shops").insert([shopData]).select().single();
-      if (!error && data) return data as Shop;
+      const { data, error } = await supabase.from("shops").insert([payload]).select().single();
+      if (!error && data) {
+        return {
+          id: data.id,
+          name: data.name || data.shop_name,
+          slug: data.slug,
+          shop_code: data.shop_code,
+          tagline: data.tagline,
+          address: data.address,
+          country: data.country,
+          state: data.state,
+          city: data.city,
+          pincode: data.pincode,
+          phone: data.phone,
+          email: data.email,
+          currency: data.currency,
+          tax_rate: data.tax_rate,
+          subscription_status: data.subscription_status,
+          start_date: data.start_date,
+          expiry_date: data.expiry_date,
+          is_lifetime: data.is_lifetime,
+          logo_url: data.logo_url || data.shop_image,
+          gpay_qr_url: data.gpay_qr_url || data.gpay_qr_image,
+          gst_number: data.gst_number,
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        } as Shop;
+      }
+      if (error) {
+        console.error("Supabase createShop insert error:", error.message, error.details);
+      }
     } catch (e) {
       console.warn("Supabase create fallback", e);
     }
     const newShop: Shop = {
       id: `shop-${Date.now()}`,
       name: shopData.name || "New Artisan Chai Shop",
-      slug: shopData.slug || `shop-${Date.now()}`,
+      slug: slug,
       shop_code: shopData.shop_code || `TEA-${Math.random().toString(36).substring(2, 7).toUpperCase()}`,
       tagline: shopData.tagline || "",
       address: shopData.address || "",
@@ -341,37 +433,130 @@ export const dataService = {
   // EMPLOYEES & PROFILES
   async getEmployees(shopId?: string): Promise<Profile[]> {
     try {
-      let query = supabase.from("profiles").select("*");
+      let query = supabase.from("users").select("*");
       if (shopId) query = query.eq("shop_id", shopId);
       const { data, error } = await query;
-      if (!error && data && data.length > 0) return data as Profile[];
+      if (!error && data && data.length > 0) {
+        return data.map((row: any) => ({
+          id: row.id,
+          shop_id: row.shop_id ?? undefined,
+          full_name: row.name || row.full_name || "Staff Member",
+          email: row.email,
+          phone: row.phone ?? undefined,
+          password: row.password_hash || row.password || "",
+          password_hash: row.password_hash || row.password || "",
+          address: row.address ?? undefined,
+          country: row.country ?? undefined,
+          state: row.state ?? undefined,
+          district: row.district ?? undefined,
+          role: row.role as UserRole,
+          monthly_salary: row.salary ?? row.monthly_salary ?? 0,
+          is_active: row.is_active ?? true,
+          created_at: row.created_at || new Date().toISOString(),
+          updated_at: row.updated_at || new Date().toISOString(),
+        })) as Profile[];
+      }
     } catch (e) {
-      console.warn("Employees fallback", e);
+      console.warn("Users query fallback", e);
     }
     return getStoredOr(STORAGE_KEYS.EMPLOYEES, MOCK_EMPLOYEES);
   },
 
-  async createAdmin(adminData: Partial<Profile>): Promise<Profile> {
+  async updateUserStatus(userId: string, isActive: boolean): Promise<boolean> {
     try {
-      const { data, error } = await supabase.from("profiles").insert([{
-        ...adminData,
-        role: "OWNER",
-      }]).select().single();
-      if (!error && data) return data as Profile;
+      const { error } = await supabase.from("users").update({ is_active: isActive }).eq("id", userId);
+      if (!error) {
+        const current = getStoredOr<Profile[]>(STORAGE_KEYS.EMPLOYEES, MOCK_EMPLOYEES);
+        const updated = current.map((u) => (u.id === userId ? { ...u, is_active: isActive } : u));
+        setStored(STORAGE_KEYS.EMPLOYEES, updated);
+        return true;
+      }
+      console.warn("Supabase user status update notice:", error.message);
     } catch (e) {
-      console.warn("Admin create fallback", e);
+      console.warn("User status update error", e);
     }
+    const current = getStoredOr<Profile[]>(STORAGE_KEYS.EMPLOYEES, MOCK_EMPLOYEES);
+    const updated = current.map((u) => (u.id === userId ? { ...u, is_active: isActive } : u));
+    setStored(STORAGE_KEYS.EMPLOYEES, updated);
+    return true;
+  },
+
+  async createAdmin(adminData: Partial<Profile>): Promise<Profile> {
+    const password = adminData.password || "Chai@123456";
+    const cleanEmail = (adminData.email || "").trim().toLowerCase();
+
+    // Directly insert / upsert into `public.users` table
+    try {
+      const userPayload: Record<string, any> = {
+        shop_id: adminData.shop_id || null,
+        name: adminData.full_name || "Store Admin",
+        email: cleanEmail,
+        phone: adminData.phone || null,
+        address: adminData.address || null,
+        password_hash: password || null,
+        role: adminData.role || "OWNER",
+        salary: adminData.monthly_salary || 0,
+        country: adminData.country || null,
+        state: adminData.state || null,
+        district: adminData.district || null,
+        is_active: true,
+      };
+
+      let { data, error } = await supabase
+        .from("users")
+        .upsert([userPayload], { onConflict: "email" })
+        .select()
+        .single();
+
+      // If database enum does not have 'OWNER' yet, retry with 'ADMIN'
+      if (error && error.message?.includes("enum user_role")) {
+        console.warn("Retrying with role 'ADMIN' due to enum restriction");
+        userPayload.role = "ADMIN";
+        const retryResult = await supabase
+          .from("users")
+          .upsert([userPayload], { onConflict: "email" })
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          shop_id: data.shop_id,
+          full_name: data.name,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          country: data.country,
+          state: data.state,
+          district: data.district,
+          role: data.role,
+          monthly_salary: data.salary,
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        } as Profile;
+      }
+      if (error) {
+        console.error("Users table createAdmin error:", error.message);
+      }
+    } catch (e) {
+      console.warn("Users table insert fallback", e);
+    }
+
     const newAdmin: Profile = {
       id: `admin-${Date.now()}`,
       shop_id: adminData.shop_id || MOCK_CURRENT_SHOP.id,
       full_name: adminData.full_name || "Store Admin",
-      email: adminData.email || "admin@chaicraft.in",
+      email: cleanEmail || "admin@chaicraft.in",
       phone: adminData.phone || "",
       address: adminData.address || "",
       country: adminData.country || "India",
       state: adminData.state || "Karnataka",
       district: adminData.district || "",
-      role: "OWNER",
+      role: adminData.role || "OWNER",
       is_active: true,
       monthly_salary: adminData.monthly_salary || 0,
       joining_date: new Date().toISOString().split("T")[0],
@@ -384,26 +569,68 @@ export const dataService = {
   },
 
   async createEmployee(employeeData: Partial<Profile>): Promise<Profile> {
+    const password = employeeData.password || "Chai@123456";
+    const cleanEmail = (employeeData.email || "").trim().toLowerCase();
+
+    // Directly insert / upsert into `public.users` table
     try {
-      const { data, error } = await supabase.from("profiles").insert([{
-        ...employeeData,
-        role: "EMPLOYEE",
-      }]).select().single();
-      if (!error && data) return data as Profile;
+      const userPayload = {
+        shop_id: employeeData.shop_id || null,
+        name: employeeData.full_name || "Store Staff",
+        email: cleanEmail,
+        phone: employeeData.phone || null,
+        address: employeeData.address || null,
+        password_hash: password || null,
+        role: employeeData.role || "EMPLOYEE",
+        salary: employeeData.monthly_salary || 0,
+        country: employeeData.country || null,
+        state: employeeData.state || null,
+        district: employeeData.district || null,
+        is_active: true,
+      };
+
+      const { data, error } = await supabase
+        .from("users")
+        .upsert([userPayload], { onConflict: "email" })
+        .select()
+        .single();
+
+      if (!error && data) {
+        return {
+          id: data.id,
+          shop_id: data.shop_id,
+          full_name: data.name,
+          email: data.email,
+          phone: data.phone,
+          address: data.address,
+          country: data.country,
+          state: data.state,
+          district: data.district,
+          role: data.role,
+          monthly_salary: data.salary,
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        } as Profile;
+      }
+      if (error) {
+        console.error("Users table createEmployee error:", error.message);
+      }
     } catch (e) {
-      console.warn("Employee create fallback", e);
+      console.warn("Users table insert fallback", e);
     }
+
     const newEmp: Profile = {
       id: `emp-${Date.now()}`,
       shop_id: employeeData.shop_id || MOCK_CURRENT_SHOP.id,
       full_name: employeeData.full_name || "Store Staff",
-      email: employeeData.email || "staff@chaicraft.in",
+      email: cleanEmail || "staff@chaicraft.in",
       phone: employeeData.phone || "",
       address: employeeData.address || "",
       country: employeeData.country || "India",
       state: employeeData.state || "Karnataka",
       district: employeeData.district || "",
-      role: "EMPLOYEE",
+      role: employeeData.role || "EMPLOYEE",
       is_active: true,
       monthly_salary: employeeData.monthly_salary || 0,
       joining_date: new Date().toISOString().split("T")[0],

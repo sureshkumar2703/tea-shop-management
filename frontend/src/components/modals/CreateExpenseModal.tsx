@@ -6,6 +6,8 @@ import { FileUpload } from "../ui/FileUpload";
 import { Expense } from "@/types";
 import { EXPENSE_CATEGORIES } from "@/lib/constants";
 import { dataService } from "@/services/supabaseService";
+import { storageService } from "@/services/storageService";
+import { useAuthStore } from "@/stores/authStore";
 
 interface CreateExpenseModalProps {
   isOpen: boolean;
@@ -18,6 +20,7 @@ export const CreateExpenseModal: React.FC<CreateExpenseModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const { shop } = useAuthStore();
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState<string>(EXPENSE_CATEGORIES[0]);
   const [amount, setAmount] = useState("");
@@ -125,11 +128,11 @@ export const CreateExpenseModal: React.FC<CreateExpenseModalProps> = ({
 
         <FileUpload
           label="Receipt / Bill Document (Tea-Shop-Images)"
-          folder="expenses"
+          folder={storageService.getShopFolder(shop?.shop_code || shop?.slug, "expenses")}
           accept="image/*,.pdf,.doc,.docx"
           value={receiptUrl}
           onChange={setReceiptUrl}
-          helperText="Upload bill photo or invoice PDF stored in Supabase bucket 'Tea-Shop-Images'"
+          helperText={`Stored in folder 'shops/${shop?.shop_code || shop?.slug || "general"}/expenses' in Supabase`}
         />
 
         <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">

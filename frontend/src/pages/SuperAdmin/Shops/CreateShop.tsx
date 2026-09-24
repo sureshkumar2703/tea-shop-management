@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { dataService } from "@/services/supabaseService";
+import { storageService } from "@/services/storageService";
 import { Shop } from "@/types";
 import { Country, State, City } from "country-state-city";
 import { getCountryCallingCode, isValidPhoneNumber } from "libphonenumber-js";
@@ -64,12 +65,13 @@ export const CreateShop: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
-    if (!name || !shopCode || !address || !countryCode || !stateCode || !city || !pincode) {
-      setFormError("Please complete all required shop and address fields.");
+    if (!name?.trim() || !shopCode?.trim() || !address?.trim() || !countryName?.trim() || !stateName?.trim() || !city?.trim() || !pincode?.trim()) {
+      setFormError("Please complete all required shop and address fields (Shop Name, Address, Country, State, City, and Pincode).");
       return;
     }
-    if (!isValidPhoneNumber(phone, countryCode as Parameters<typeof isValidPhoneNumber>[1])) {
-      setFormError("Please enter a valid phone number for the selected country.");
+    const rawPhone = phone.replace(/[^0-9]/g, "");
+    if (!rawPhone || (countryCode === "IN" && rawPhone.length !== 10) || (countryCode !== "IN" && rawPhone.length < 7)) {
+      setFormError("Please enter a valid phone number (10 digits for India).");
       return;
     }
     if (!isLifetime && !expiryDate) {
@@ -147,13 +149,28 @@ export const CreateShop: React.FC = () => {
               <Button type="button" size="sm" variant="secondary" icon={<RefreshCw className="w-3.5 h-3.5" />} onClick={() => setShopCode(generateShopCode())}>Regenerate Code</Button>
             </div>
 
+            <Input
+              label="Shop / Franchise Name *"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Chai Craft Salem Branch"
+              required
+            />
+
+            <Input
+              label="Tagline / Motto"
+              value={tagline}
+              onChange={(e) => setTagline(e.target.value)}
+              placeholder="e.g. Authentic Irani & Special Kulhad Chai"
+            />
+
             <FileUpload
               label="Shop Image / Logo"
-              folder="shops"
+              folder={storageService.getShopFolder(shopCode, "logo")}
               accept="image/*"
               value={imageUrl}
               onChange={setImageUrl}
-              helperText="Upload a PNG, JPG, or WebP image."
+              helperText={`Stored in folder 'shops/${shopCode}/logo' within bucket '${storageService.getBucketName()}'`}
             />
 
             {/* Store Address & Contact */}
@@ -267,11 +284,11 @@ export const CreateShop: React.FC = () => {
               )}
               <FileUpload
                 label="GPay QR Image"
-                folder="shops"
+                folder={storageService.getShopFolder(shopCode, "qr")}
                 accept="image/*"
                 value={gpayQrUrl}
                 onChange={setGpayQrUrl}
-                helperText="Upload the QR image customers will scan."
+                helperText={`Stored in folder 'shops/${shopCode}/qr' within bucket '${storageService.getBucketName()}'`}
               />
             </div>
 

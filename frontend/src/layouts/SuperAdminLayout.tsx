@@ -28,8 +28,8 @@ export const SuperAdminLayout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { label: "Overview", path: "/super-admin/dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { label: "Shops & Franchises", path: "/super-admin/shops", icon: <Store className="w-4 h-4" /> },
-    { label: "Create New Shop", path: "/super-admin/shops/new", icon: <Store className="w-4 h-4" /> },
     { label: "Shop Admins", path: "/super-admin/admins", icon: <Users className="w-4 h-4" /> },
+    { label: "Super Admins", path: "/super-admin/super-admins", icon: <ShieldCheck className="w-4 h-4" /> },
     { label: "Platform Reports", path: "/super-admin/reports", icon: <BarChart3 className="w-4 h-4" /> },
     { label: "System Settings", path: "/super-admin/settings", icon: <Settings className="w-4 h-4" /> },
   ];

@@ -6,11 +6,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { dataService } from "@/services/supabaseService";
+import { storageService } from "@/services/storageService";
+import { useAuthStore } from "@/stores/authStore";
 import { Category, Product } from "@/types";
 import { ArrowLeft, Sparkles, Scale, Package, CheckCircle2, Coffee } from "lucide-react";
 
 export const ProductForm: React.FC = () => {
   const navigate = useNavigate();
+  const { shop } = useAuthStore();
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState("");
@@ -363,11 +366,11 @@ export const ProductForm: React.FC = () => {
 
             <FileUpload
               label="Product Image (Tea-Shop-Images)"
-              folder="products"
+              folder={storageService.getShopFolder(shop?.shop_code || shop?.slug, "products")}
               accept="image/*"
               value={imageUrl}
               onChange={setImageUrl}
-              helperText="Upload image or paste image URL"
+              helperText={`Stored in folder 'shops/${shop?.shop_code || shop?.slug || "general"}/products' in Supabase`}
             />
 
             <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">

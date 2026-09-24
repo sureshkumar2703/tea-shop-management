@@ -14,7 +14,8 @@ export type StorageFolder =
   | "expenses"
   | "purchases"
   | "documents"
-  | "avatars";
+  | "avatars"
+  | (string & {});
 
 export const storageService = {
   /**
@@ -23,13 +24,32 @@ export const storageService = {
   getBucketName: () => SUPABASE_STORAGE_BUCKET,
 
   /**
-   * Uploads an image or document to Supabase Storage bucket 'Tea-Shop-Images'
+   * Generates a dynamic folder path for a specific shop code or slug
+   * @param shopCode The shop code or slug (e.g., 'TEA-X8K92')
+   * @param subfolder Optional subfolder (e.g., 'logo', 'qr', 'products', 'expenses')
+   */
+  getShopFolder(shopCode?: string, subfolder?: string): string {
+    const cleanCode = (shopCode || "general").replace(/[^a-zA-Z0-9_-]/g, "_");
+    if (subfolder) {
+      return `shops/${cleanCode}/${subfolder}`;
+    }
+    return `shops/${cleanCode}`;
+  },
+
+  /**
+   * Uploads an image or document to Supabase Storage bucket 'Tea-Shop-Images' under a dynamic folder
    * @param file The browser File object
-   * @param folder Subfolder within the bucket (e.g., 'products', 'expenses', 'shops')
+   * @param folder Subfolder or dynamic path within the bucket (e.g., 'shops/TEA-X8K92', 'shops/TEA-X8K92/products')
    */
   async uploadFile(file: File, folder: StorageFolder = "products"): Promise<UploadResult> {
+    const cleanFolder = folder
+      .split("/")
+      .map((segment) => segment.trim().replace(/[^a-zA-Z0-9_.-]/g, "_"))
+      .filter(Boolean)
+      .join("/");
+
     const cleanFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const filePath = `${folder}/${Date.now()}_${cleanFileName}`;
+    const filePath = cleanFolder ? `${cleanFolder}/${Date.now()}_${cleanFileName}` : `${Date.now()}_${cleanFileName}`;
 
     try {
       const { data, error } = await supabase.storage

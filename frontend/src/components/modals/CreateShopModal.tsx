@@ -4,7 +4,9 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { FileUpload } from "../ui/FileUpload";
 import { dataService } from "@/services/supabaseService";
+import { storageService } from "@/services/storageService";
 import { Shop } from "@/types";
+import { RefreshCw } from "lucide-react";
 
 interface CreateShopModalProps {
   isOpen: boolean;
@@ -17,7 +19,17 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const generateShopCode = () => {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "TEA-";
+    for (let i = 0; i < 5; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  };
+
   const [name, setName] = useState("");
+  const [shopCode, setShopCode] = useState(generateShopCode());
   const [tagline, setTagline] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
@@ -34,6 +46,7 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
     const created = await dataService.createShop({
       name,
       slug,
+      shop_code: shopCode,
       tagline,
       address,
       phone,
@@ -58,6 +71,24 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
       size="md"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-400 block">
+              Dynamic Shop Code
+            </span>
+            <span className="text-sm font-mono font-bold text-amber-900 dark:text-amber-200">
+              {shopCode}
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setShopCode(generateShopCode())}
+            className="text-xs text-amber-700 hover:text-amber-800 dark:text-amber-300 flex items-center gap-1 font-semibold"
+          >
+            <RefreshCw className="w-3.5 h-3.5" /> Regenerate
+          </button>
+        </div>
+
         <Input
           label="Shop / Franchise Name *"
           value={name}
@@ -101,11 +132,11 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
 
         <FileUpload
           label="Shop Logo / Store Picture (Tea-Shop-Images)"
-          folder="shops"
+          folder={storageService.getShopFolder(shopCode, "logo")}
           accept="image/*"
           value={logoUrl}
           onChange={setLogoUrl}
-          helperText="Upload shop brand logo stored in Supabase bucket 'Tea-Shop-Images'"
+          helperText={`Saved dynamically in bucket folder 'shops/${shopCode}/logo'`}
         />
 
         <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">

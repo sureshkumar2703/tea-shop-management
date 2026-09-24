@@ -33,6 +33,7 @@ export const AdminCreateAdmin: React.FC = () => {
       full_name: fullName,
       email,
       phone,
+      password,
       address,
       country,
       state,

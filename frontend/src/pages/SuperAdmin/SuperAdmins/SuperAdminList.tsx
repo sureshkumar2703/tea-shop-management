@@ -5,27 +5,23 @@ import { DataTable } from "@/components/tables/DataTable";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { dataService } from "@/services/supabaseService";
-import { Profile, Shop } from "@/types";
+import { Profile } from "@/types";
 import { formatDate } from "@/lib/utils";
-import { Plus, Users, Mail, Phone, Store, UserCheck, Eye, EyeOff, Calendar, ShieldCheck, CheckCircle2, XCircle } from "lucide-react";
+import { Plus, ShieldCheck, Eye, EyeOff } from "lucide-react";
 
-export const SuperAdminAdminList: React.FC = () => {
+export const SuperAdminSuperAdminList: React.FC = () => {
   const navigate = useNavigate();
-  const [admins, setAdmins] = useState<Profile[]>([]);
-  const [shops, setShops] = useState<Shop[]>([]);
+  const [superAdmins, setSuperAdmins] = useState<Profile[]>([]);
   const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
   const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
 
   const loadData = () => {
-    Promise.all([dataService.getEmployees(), dataService.getShops()]).then(([users, shopList]) => {
-      // Show ONLY Franchise Store Owners (role === 'OWNER' or assigned to a shop branch, excluding global platform admin)
-      const ownersOnly = users.filter((u) => {
-        if (u.role === "OWNER") return true;
-        if (u.role === "ADMIN" && u.shop_id && !u.email.includes("superadmin")) return true;
-        return false;
-      });
-      setAdmins(ownersOnly);
-      setShops(shopList);
+    dataService.getEmployees().then((users) => {
+      // Filter ONLY Platform / Global Super Admins (no shop_id or role ADMIN with superadmin pattern or unassigned)
+      const adminsOnly = users.filter(
+        (u) => u.role === "ADMIN" && (!u.shop_id || u.email.includes("superadmin") || u.email.includes("admin"))
+      );
+      setSuperAdmins(adminsOnly);
     });
   };
 
@@ -45,7 +41,7 @@ export const SuperAdminAdminList: React.FC = () => {
     setUpdatingStatusId(userId);
 
     // Optimistically update local state
-    setAdmins((prev) =>
+    setSuperAdmins((prev) =>
       prev.map((u) => (u.id === userId ? { ...u, is_active: isActive } : u))
     );
 
@@ -53,15 +49,10 @@ export const SuperAdminAdminList: React.FC = () => {
     setUpdatingStatusId(null);
   };
 
-  const getShopForUser = (user: Profile): Shop | undefined => {
-    if (!user.shop_id) return undefined;
-    return shops.find((s) => s.id === user.shop_id);
-  };
-
   const columns = [
     {
       key: "full_name",
-      header: "Administrator / Owner Name",
+      header: "Administrator Name",
       render: (u: Profile) => (
         <div>
           <span className="font-bold text-slate-900 dark:text-white block">{u.full_name}</span>
@@ -70,29 +61,12 @@ export const SuperAdminAdminList: React.FC = () => {
       ),
     },
     {
-      key: "shop_name",
-      header: "Shop Name",
-      render: (u: Profile) => {
-        const shop = getShopForUser(u);
-        return (
-          <div className="space-y-0.5">
-            <span className="font-semibold text-slate-800 dark:text-slate-200 block text-xs">
-              {shop?.name || "Global / Unassigned"}
-            </span>
-            {shop?.shop_code && (
-              <span className="inline-block font-mono text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 px-1.5 py-0.2 rounded">
-                {shop.shop_code}
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
       key: "role",
       header: "Access Level",
       render: () => (
-        <Badge variant="amber">Shop Owner</Badge>
+        <Badge variant="amber">
+          Super Admin
+        </Badge>
       ),
     },
     {
@@ -101,6 +75,15 @@ export const SuperAdminAdminList: React.FC = () => {
       render: (u: Profile) => (
         <span className="text-xs font-mono text-slate-700 dark:text-slate-300">
           {u.phone || "N/A"}
+        </span>
+      ),
+    },
+    {
+      key: "location",
+      header: "Location",
+      render: (u: Profile) => (
+        <span className="text-xs text-slate-600 dark:text-slate-400">
+          {[u.district, u.state, u.country].filter(Boolean).join(", ") || "Headquarters"}
         </span>
       ),
     },
@@ -128,49 +111,26 @@ export const SuperAdminAdminList: React.FC = () => {
       },
     },
     {
-      key: "start_date",
-      header: "Start Date",
-      render: (u: Profile) => {
-        const shop = getShopForUser(u);
-        const dateStr = shop?.start_date || u.created_at;
-        return (
-          <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
-            {dateStr ? formatDate(dateStr) : "N/A"}
-          </span>
-        );
-      },
-    },
-    {
-      key: "expiry_date",
-      header: "Expiry Date / Lifetime",
-      render: (u: Profile) => {
-        const shop = getShopForUser(u);
-        if (!shop) return <span className="text-xs text-slate-400">N/A</span>;
-        if (shop.is_lifetime) {
-          return (
-            <Badge variant="success" className="font-bold">
-              Lifetime Access
-            </Badge>
-          );
-        }
-        return (
-          <span className="text-xs font-medium text-slate-700 dark:text-slate-300">
-            {shop.expiry_date ? formatDate(shop.expiry_date) : "N/A"}
-          </span>
-        );
-      },
+      key: "created_at",
+      header: "Created Date",
+      render: (u: Profile) => (
+        <span className="text-xs font-medium text-slate-600 dark:text-slate-400">
+          {u.created_at ? formatDate(u.created_at) : "N/A"}
+        </span>
+      ),
     },
     {
       key: "status",
       header: "Status",
       render: (u: Profile) => {
+        const isUpdating = updatingStatusId === u.id;
         return (
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             <select
               value={u.is_active ? "ACTIVE" : "INACTIVE"}
-              disabled={updatingStatusId === u.id}
+              disabled={isUpdating}
               onChange={(e) => handleStatusChange(u.id, e.target.value)}
-              className={`text-xs font-bold px-2.5 py-1 rounded-xl border transition-all cursor-pointer outline-none focus:ring-2 focus:ring-amber-500 ${
+              className={`text-xs font-bold rounded-lg border px-2 py-1 transition-colors cursor-pointer ${
                 u.is_active
                   ? "bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800"
                   : "bg-rose-50 text-rose-700 border-rose-300 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800"
@@ -192,30 +152,31 @@ export const SuperAdminAdminList: React.FC = () => {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold font-['Outfit'] text-slate-900 dark:text-white flex items-center gap-2">
-              <UserCheck className="w-6 h-6 text-amber-500" />
-              Franchise & Store Administrators
+              <ShieldCheck className="w-6 h-6 text-amber-500" />
+              Super Administrators
             </h1>
             <p className="text-xs text-slate-500">
-              Manage store franchise owners, branch assignments, credentials, and access status
+              Manage platform system administrators with enterprise-wide governance privileges
             </p>
           </div>
           <Button
             variant="primary"
             icon={<Plus className="w-4 h-4" />}
-            onClick={() => navigate("/super-admin/admins/new")}
+            onClick={() => navigate("/super-admin/super-admins/new")}
           >
-            Create Shop Owner
+            Create Super Admin
           </Button>
         </div>
 
         <DataTable
           columns={columns}
-          data={admins}
+          data={superAdmins}
           searchKey="full_name"
-          searchPlaceholder="Search store owners by name..."
+          searchPlaceholder="Search super admins by name or email..."
         />
       </div>
     </SuperAdminLayout>
   );
 };
-export default SuperAdminAdminList;
+
+export default SuperAdminSuperAdminList;

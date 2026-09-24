@@ -5,6 +5,8 @@ import { Input } from "../ui/Input";
 import { FileUpload } from "../ui/FileUpload";
 import { Product, Category } from "@/types";
 import { dataService } from "@/services/supabaseService";
+import { storageService } from "@/services/storageService";
+import { useAuthStore } from "@/stores/authStore";
 import { Plus, Trash2 } from "lucide-react";
 
 interface CreateProductModalProps {
@@ -20,6 +22,7 @@ export const CreateProductModal: React.FC<CreateProductModalProps> = ({
   categories,
   onSuccess,
 }) => {
+  const { shop } = useAuthStore();
   const [name, setName] = useState("");
   const [categoryId, setCategoryId] = useState(categories[0]?.id || "");
   const [sku, setSku] = useState("");
@@ -150,11 +153,11 @@ export const CreateProductModal: React.FC<CreateProductModalProps> = ({
 
         <FileUpload
           label="Product Image (Tea-Shop-Images)"
-          folder="products"
+          folder={storageService.getShopFolder(shop?.shop_code || shop?.slug, "products")}
           accept="image/*"
           value={imageUrl}
           onChange={setImageUrl}
-          helperText="Upload item image stored in Supabase bucket 'Tea-Shop-Images'"
+          helperText={`Stored in folder 'shops/${shop?.shop_code || shop?.slug || "general"}/products' in Supabase`}
         />
 
         {/* Portions / Variants */}

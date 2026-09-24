@@ -592,14 +592,20 @@ AS $$
 BEGIN
     INSERT INTO public.users (shop_id, name, email, phone, role, salary, is_active)
     VALUES (
-        NULL,
+        NULLIF(NEW.raw_user_meta_data ->> 'shop_id', '')::uuid,
         COALESCE(NEW.raw_user_meta_data ->> 'name', split_part(NEW.email, '@', 1)),
         NEW.email,
-        NULLIF(NEW.raw_user_meta_data ->> 'phone', ''),
-        'ADMIN'::user_role,
+        NULLIF(COALESCE(NEW.raw_user_meta_data ->> 'phone', NEW.phone), ''),
+        COALESCE((NEW.raw_user_meta_data ->> 'role')::user_role, 'ADMIN'::user_role),
         0,
         TRUE
-    );
+    )
+    ON CONFLICT (email) DO UPDATE
+    SET
+        name = COALESCE(EXCLUDED.name, public.users.name),
+        phone = COALESCE(EXCLUDED.phone, public.users.phone),
+        role = COALESCE(EXCLUDED.role, public.users.role),
+        shop_id = COALESCE(EXCLUDED.shop_id, public.users.shop_id);
 
     RETURN NEW;
 END;

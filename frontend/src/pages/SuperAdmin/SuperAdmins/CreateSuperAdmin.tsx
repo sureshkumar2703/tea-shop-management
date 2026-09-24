@@ -1,24 +1,17 @@
-import React, { useState, useEffect } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { SuperAdminLayout } from "@/layouts/SuperAdminLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import { dataService } from "@/services/supabaseService";
-import { Shop } from "@/types";
 import { Country, State, City } from "country-state-city";
-import { getCountryCallingCode, isValidPhoneNumber } from "libphonenumber-js";
-import { ArrowLeft, ShieldCheck, Store, Lock, Eye, EyeOff, UserCheck, AlertCircle } from "lucide-react";
+import { getCountryCallingCode } from "libphonenumber-js";
+import { ArrowLeft, ShieldCheck, Lock, Eye, EyeOff, AlertCircle } from "lucide-react";
 
-export const SuperAdminCreateAdmin: React.FC = () => {
+export const CreateSuperAdminPage: React.FC = () => {
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const paramShopId = searchParams.get("shopId");
-
-  const [shops, setShops] = useState<Shop[]>([]);
-  const [shopId, setShopId] = useState(paramShopId || "");
-  const [selectedShop, setSelectedShop] = useState<Shop | null>(null);
 
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
@@ -41,41 +34,12 @@ export const SuperAdminCreateAdmin: React.FC = () => {
     ? getCountryCallingCode(countryCode as Parameters<typeof getCountryCallingCode>[0])
     : "";
 
-  useEffect(() => {
-    dataService.getShops().then((res) => {
-      setShops(res);
-      if (paramShopId) {
-        const found = res.find((s) => s.id === paramShopId);
-        if (found) {
-          setShopId(found.id);
-          setSelectedShop(found);
-          return;
-        }
-      }
-      if (res && res.length > 0) {
-        if (!shopId) {
-          setShopId(res[0].id);
-          setSelectedShop(res[0]);
-        } else {
-          const found = res.find((s) => s.id === shopId);
-          if (found) setSelectedShop(found);
-        }
-      }
-    });
-  }, [paramShopId]);
-
-  const handleShopChange = (id: string) => {
-    setShopId(id);
-    const found = shops.find((s) => s.id === id);
-    setSelectedShop(found || null);
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setFormError("");
 
-    if (!fullName.trim() || !email.trim() || !password || !shopId) {
-      setFormError("Please provide Full Name, Email, Password, and select an Assigned Franchise Branch.");
+    if (!fullName.trim() || !email.trim() || !password) {
+      setFormError("Please provide Full Name, Email, and Password.");
       return;
     }
 
@@ -99,7 +63,7 @@ export const SuperAdminCreateAdmin: React.FC = () => {
 
     try {
       await dataService.createAdmin({
-        shop_id: shopId,
+        shop_id: undefined,
         full_name: fullName.trim(),
         email: email.trim().toLowerCase(),
         phone: phone.trim(),
@@ -108,15 +72,15 @@ export const SuperAdminCreateAdmin: React.FC = () => {
         country: countries.find((c) => c.isoCode === countryCode)?.name || countryName,
         state: stateName,
         district: district,
-        role: "OWNER",
+        role: "ADMIN",
         monthly_salary: 0,
       });
 
       setIsLoading(false);
-      navigate("/super-admin/admins");
+      navigate("/super-admin/super-admins");
     } catch (err: any) {
       setIsLoading(false);
-      setFormError(err?.message || "Failed to create shop owner account.");
+      setFormError(err?.message || "Failed to create super administrator account.");
     }
   };
 
@@ -124,19 +88,19 @@ export const SuperAdminCreateAdmin: React.FC = () => {
     <SuperAdminLayout>
       <div className="max-w-2xl mx-auto space-y-6">
         <button
-          onClick={() => navigate("/super-admin/admins")}
+          onClick={() => navigate("/super-admin/super-admins")}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Store Owners & Admins
+          <ArrowLeft className="w-4 h-4" /> Back to Super Administrators
         </button>
 
         <div>
           <h1 className="text-2xl font-bold font-['Outfit'] text-slate-900 dark:text-white flex items-center gap-2">
-            <UserCheck className="w-6 h-6 text-amber-500" />
-            Create Shop Owner Account
+            <ShieldCheck className="w-6 h-6 text-amber-500" />
+            Create Super Administrator Account
           </h1>
           <p className="text-xs text-slate-500">
-            Register store franchise owner credentials linked to the franchise branch and auto-assigned shop code
+            Provision enterprise super admin credentials with full platform and governance permissions
           </p>
         </div>
 
@@ -149,50 +113,25 @@ export const SuperAdminCreateAdmin: React.FC = () => {
 
         <Card className="p-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* Franchise Selection & Auto-Display of Shop Code */}
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-3">
-              <label className="block text-xs font-bold text-amber-900 dark:text-amber-200">
-                Assigned Store Branch *
-              </label>
-              <select
-                value={shopId}
-                onChange={(e) => handleShopChange(e.target.value)}
-                className="w-full rounded-xl border border-amber-300 dark:border-amber-800 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 font-semibold"
-                required
-              >
-                {shops.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.shop_code || s.slug})
-                  </option>
-                ))}
-              </select>
-
-              {/* Default Shop Code & Role Display */}
-              <div className="flex items-center justify-between pt-2 border-t border-amber-500/20 text-xs">
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-amber-800 dark:text-amber-300">
-                    Assigned Shop Code:
-                  </span>
-                  <span className="font-mono font-black px-2.5 py-0.5 rounded-lg bg-amber-500/20 text-amber-900 dark:text-amber-200">
-                    {selectedShop?.shop_code || "TEA-AUTO"}
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <span className="font-semibold text-amber-800 dark:text-amber-300">
-                    Role Access:
-                  </span>
-                  <Badge variant="amber">Shop Owner (OWNER)</Badge>
-                </div>
+            {/* Super Admin Role Badge */}
+            <div className="p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ShieldCheck className="w-5 h-5 text-amber-600 dark:text-amber-400" />
+                <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                  Global System Role:
+                </span>
               </div>
+              <Badge variant="amber" className="font-bold">
+                Platform Administrator (ADMIN)
+              </Badge>
             </div>
 
-            {/* Owner Personal Details */}
+            {/* Admin Personal Details */}
             <Input
-              label="Store Owner Full Name *"
+              label="Super Administrator Full Name *"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              placeholder="e.g. Vikramaditya Rathore"
+              placeholder="e.g. Suresh Kumar"
               required
             />
 
@@ -202,7 +141,7 @@ export const SuperAdminCreateAdmin: React.FC = () => {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="owner@chaicraft.in"
+                placeholder="admin@chaicraft.in"
                 required
               />
 
@@ -218,10 +157,10 @@ export const SuperAdminCreateAdmin: React.FC = () => {
 
             {/* Address */}
             <Input
-              label="Residential / Office Address *"
+              label="Address *"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              placeholder="Shop #12, 100ft Road, HAL 2nd Stage, Indiranagar, Bangalore"
+              placeholder="Headquarters, 100ft Road, Indiranagar, Bangalore"
               required
             />
 
@@ -230,7 +169,7 @@ export const SuperAdminCreateAdmin: React.FC = () => {
               <div>
                 <Input
                   label="Country *"
-                  list="owner-countries"
+                  list="superadmin-countries"
                   value={countryName}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -249,7 +188,7 @@ export const SuperAdminCreateAdmin: React.FC = () => {
                   placeholder="Type or select country"
                   required
                 />
-                <datalist id="owner-countries">
+                <datalist id="superadmin-countries">
                   {countries.map((item) => (
                     <option key={item.isoCode} value={item.name} />
                   ))}
@@ -258,8 +197,8 @@ export const SuperAdminCreateAdmin: React.FC = () => {
 
               <div>
                 <Input
-                  label="State *"
-                  list="owner-states"
+                  label="State / Province *"
+                  list="superadmin-states"
                   value={stateName}
                   onChange={(e) => {
                     const value = e.target.value;
@@ -268,15 +207,15 @@ export const SuperAdminCreateAdmin: React.FC = () => {
                         item.name.toLowerCase() === value.toLowerCase() ||
                         item.isoCode.toLowerCase() === value.toLowerCase()
                     );
-                    setStateCode(selected?.isoCode || "");
                     setStateName(value);
+                    setStateCode(selected?.isoCode || "");
                     setDistrict("");
                   }}
                   placeholder={countryCode ? "Type or select state" : "Select a country first"}
                   disabled={!countryCode}
                   required
                 />
-                <datalist id="owner-states">
+                <datalist id="superadmin-states">
                   {states.map((item) => (
                     <option key={item.isoCode} value={item.name} />
                   ))}
@@ -286,14 +225,13 @@ export const SuperAdminCreateAdmin: React.FC = () => {
               <div>
                 <Input
                   label="District / City *"
-                  list="owner-cities"
+                  list="superadmin-cities"
                   value={district}
                   onChange={(e) => setDistrict(e.target.value)}
-                  placeholder={stateCode ? "Type or select city" : "Select a state first"}
-                  disabled={!stateCode && !stateName}
+                  placeholder={stateCode ? "Type or select city" : "Type city name"}
                   required
                 />
-                <datalist id="owner-cities">
+                <datalist id="superadmin-cities">
                   {cities.map((item) => (
                     <option key={item.name} value={item.name} />
                   ))}
@@ -302,17 +240,18 @@ export const SuperAdminCreateAdmin: React.FC = () => {
             </div>
 
             {/* Password */}
-            <div className="space-y-1">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
-                Account Login Password *
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Lock className="w-3.5 h-3.5 text-amber-500" />
+                System Login Password *
               </label>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Set secure login password (min 6 characters)"
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 pr-10 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  placeholder="Create secure password (min 6 characters)"
+                  className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500 transition-colors pr-10 font-mono"
                   required
                   minLength={6}
                 />
@@ -324,19 +263,21 @@ export const SuperAdminCreateAdmin: React.FC = () => {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                This password allows the administrator to access the Super Admin control panel.
+              </p>
             </div>
 
-            <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
+            <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
               <Button
                 type="button"
-                variant="secondary"
-                onClick={() => navigate("/super-admin/admins")}
-                className="flex-1"
+                variant="outline"
+                onClick={() => navigate("/super-admin/super-admins")}
               >
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" isLoading={isLoading} className="flex-1">
-                Save & Register Shop Owner
+              <Button type="submit" variant="primary" isLoading={isLoading}>
+                Create Super Administrator
               </Button>
             </div>
           </form>
@@ -345,4 +286,5 @@ export const SuperAdminCreateAdmin: React.FC = () => {
     </SuperAdminLayout>
   );
 };
-export default SuperAdminCreateAdmin;
+
+export default CreateSuperAdminPage;

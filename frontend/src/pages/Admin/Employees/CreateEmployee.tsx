@@ -34,6 +34,7 @@ export const CreateEmployee: React.FC = () => {
       full_name: fullName,
       email,
       phone,
+      password,
       address,
       country,
       state,
