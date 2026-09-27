@@ -41,12 +41,16 @@ import CreateExpense from "@/pages/Admin/Expenses/CreateExpense";
 import CashRegister from "@/pages/Admin/Cash/CashRegister";
 import EmployeeList from "@/pages/Admin/Employees/EmployeeList";
 import CreateEmployee from "@/pages/Admin/Employees/CreateEmployee";
+import AdminAdminList from "@/pages/Admin/Admins/AdminList";
 import AdminCreateAdmin from "@/pages/Admin/Admins/CreateAdmin";
 import SalaryManagement from "@/pages/Admin/Salary/SalaryManagement";
 import AttendanceManagement from "@/pages/Admin/Attendance/AttendanceManagement";
 import ReportsDashboard from "@/pages/Admin/Reports/ReportsDashboard";
+import UserBillReport from "@/pages/Admin/Reports/UserBillReport";
+import UserExpenseReport from "@/pages/Admin/Reports/UserExpenseReport";
 import AdminSettings from "@/pages/Admin/Settings";
 import DatepayPage from "@/pages/Admin/Cash/Datepay";
+import DatepayHistory from "@/pages/Admin/Cash/DatepayHistory";
 
 // Employee Pages
 import EmployeeDashboard from "@/pages/Employee/Dashboard";
@@ -109,21 +113,25 @@ export const AppRoutes: React.FC = () => {
           <Route path="/admin/categories" element={<CategoryList />} />
           <Route path="/admin/products" element={<ProductList />} />
           <Route path="/admin/products/new" element={<ProductForm />} />
+          <Route path="/admin/products/:id/edit" element={<ProductForm />} />
           <Route path="/admin/stock" element={<StockOverview />} />
           <Route path="/admin/stock/adjust" element={<StockAdjustment />} />
           <Route path="/admin/purchases" element={<PurchaseList />} />
           <Route path="/admin/purchases/new" element={<CreatePurchase />} />
           <Route path="/admin/suppliers" element={<SupplierList />} />
           <Route path="/admin/expenses" element={<ExpenseList />} />
-          <Route path="/admin/expenses/new" element={<CreateExpense />} />
-          <Route path="/admin/cash" element={<CashRegister />} />
+          <Route path="/admin/cash" element={<Navigate to="/admin/datepay" replace />} />
           <Route path="/admin/datepay" element={<DatepayPage />} />
+          <Route path="/admin/datepay/history" element={<DatepayHistory />} />
           <Route path="/admin/employees" element={<EmployeeList />} />
           <Route path="/admin/employees/new" element={<CreateEmployee />} />
+          <Route path="/admin/admins" element={<AdminAdminList />} />
           <Route path="/admin/admins/new" element={<AdminCreateAdmin />} />
           <Route path="/admin/salary" element={<SalaryManagement />} />
           <Route path="/admin/attendance" element={<AttendanceManagement />} />
           <Route path="/admin/reports" element={<ReportsDashboard />} />
+          <Route path="/admin/reports/user-bills" element={<UserBillReport />} />
+          <Route path="/admin/reports/user-expenses" element={<UserExpenseReport />} />
           <Route path="/admin/settings" element={<AdminSettings />} />
         </Route>
 
@@ -131,7 +139,7 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={["EMPLOYEE", "OWNER", "ADMIN"]} />}>
           <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
           <Route path="/employee/billing" element={<EmployeePOS />} />
-          <Route path="/employee/cash" element={<ShiftCash />} />
+          <Route path="/employee/cash" element={<Navigate to="/employee/dashboard" replace />} />
           <Route path="/employee/reports" element={<ShiftReports />} />
           <Route path="/employee/salary" element={<EmployeeSalaryReport />} />
           <Route path="/employee/profile" element={<Profile />} />

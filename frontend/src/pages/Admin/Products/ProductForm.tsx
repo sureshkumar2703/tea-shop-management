@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { AdminLayout } from "@/layouts/AdminLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,10 +9,13 @@ import { dataService } from "@/services/supabaseService";
 import { storageService } from "@/services/storageService";
 import { useAuthStore } from "@/stores/authStore";
 import { Category, Product } from "@/types";
-import { ArrowLeft, Sparkles, Scale, Package, CheckCircle2, Coffee } from "lucide-react";
+import { ArrowLeft, Sparkles, Scale, Package, CheckCircle2, Coffee, Trash2, Edit } from "lucide-react";
 
 export const ProductForm: React.FC = () => {
   const navigate = useNavigate();
+  const { id } = useParams<{ id: string }>();
+  const isEditMode = Boolean(id);
+
   const { shop } = useAuthStore();
   const [categories, setCategories] = useState<Category[]>([]);
   const [name, setName] = useState("");
@@ -22,7 +25,8 @@ export const ProductForm: React.FC = () => {
   // Unit Mode: QTY or WEIGHT (gm / kg)
   const [unitMode, setUnitMode] = useState<"QTY" | "WEIGHT">("QTY");
   const [weightUnit, setWeightUnit] = useState<"GM" | "KG">("GM");
-  const [stockQuantity, setStockQuantity] = useState("100");
+  const [trackStock, setTrackStock] = useState<boolean>(false);
+  const [stockQuantity, setStockQuantity] = useState("50");
   const [availableWeight, setAvailableWeight] = useState("1000");
 
   // Pricing: Standard Price vs Regular & Thirsty Price
@@ -37,20 +41,48 @@ export const ProductForm: React.FC = () => {
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
-    dataService.getCategories().then((res) => {
-      setCategories(res);
-      if (res[0]) {
-        setCategoryId(res[0].id);
-        setSelectedCategory(res[0]);
-      }
-    });
-  }, []);
+    const initData = async () => {
+      const cats = await dataService.getCategories(shop?.id);
+      setCategories(cats);
 
-  const handleCategorySelect = (id: string) => {
-    setCategoryId(id);
-    const cat = categories.find((c) => c.id === id) || null;
+      if (isEditMode && id) {
+        const prod = await dataService.getProductById(id);
+        if (prod) {
+          setName(prod.name);
+          setCategoryId(prod.category_id || "");
+          const cat = cats.find((c) => c.id === prod.category_id) || null;
+          setSelectedCategory(cat);
+
+          setUnitMode(prod.unit_mode || "QTY");
+          setWeightUnit(prod.weight_unit || "GM");
+          const hasTrackedStock = prod.track_stock !== false && prod.stock_quantity !== undefined && prod.stock_quantity !== null;
+          setTrackStock(hasTrackedStock);
+          setStockQuantity(prod.stock_quantity?.toString() || "50");
+          setAvailableWeight(prod.available_weight?.toString() || "1000");
+
+          setStandardPrice(prod.base_price?.toString() || "");
+          setRegularPrice(prod.regular_price?.toString() || prod.base_price?.toString() || "");
+          setThirstyPrice(prod.thirsty_price?.toString() || "");
+          setCostPrice(prod.cost_price?.toString() || "");
+
+          setIsActive(prod.is_active !== false && prod.is_available !== false);
+          setDescription(prod.description || "");
+          setImageUrl(prod.image_url || "");
+        }
+      } else if (cats[0]) {
+        setCategoryId(cats[0].id);
+        setSelectedCategory(cats[0]);
+      }
+    };
+    initData();
+  }, [id, isEditMode, shop?.id]);
+
+  const handleCategorySelect = (catId: string) => {
+    setCategoryId(catId);
+    const cat = categories.find((c) => c.id === catId) || null;
     setSelectedCategory(cat);
   };
 
@@ -79,12 +111,15 @@ export const ProductForm: React.FC = () => {
       ? parseFloat(regularPrice) || 0
       : parseFloat(standardPrice) || 0;
 
-    const newProductData: Partial<Product> = {
+    const productPayload: Partial<Product> = {
+      shop_id: shop?.id || "a1111111-1111-1111-1111-111111111111",
       name,
       category_id: categoryId,
       unit_mode: unitMode,
       weight_unit: weightUnit,
-      stock_quantity: unitMode === "QTY" ? parseFloat(stockQuantity) || 0 : undefined,
+      track_stock: trackStock,
+      is_unlimited: !trackStock,
+      stock_quantity: trackStock && unitMode === "QTY" ? parseFloat(stockQuantity) || 0 : undefined,
       available_weight: unitMode === "WEIGHT" ? parseFloat(availableWeight) || 0 : undefined,
       price_mode: isCategoryRegularThirsty ? "REGULAR_THIRSTY" : "STANDARD",
       regular_price: isCategoryRegularThirsty ? parseFloat(regularPrice) || 0 : undefined,
@@ -99,27 +134,44 @@ export const ProductForm: React.FC = () => {
         ? [
             {
               id: `v-reg-${Date.now()}`,
-              product_id: "",
-              shop_id: "",
+              product_id: id || "",
+              shop_id: shop?.id || "a1111111-1111-1111-1111-111111111111",
               name: "Regular",
               price: parseFloat(regularPrice) || 0,
+              cost_price: parseFloat(costPrice) || 0,
               is_default: true,
             },
             {
               id: `v-thi-${Date.now()}`,
-              product_id: "",
-              shop_id: "",
+              product_id: id || "",
+              shop_id: shop?.id || "a1111111-1111-1111-1111-111111111111",
               name: "Thirsty",
               price: parseFloat(thirstyPrice) || 0,
+              cost_price: parseFloat(costPrice) || 0,
               is_default: false,
             },
           ]
         : [],
     };
 
-    await dataService.createProduct(newProductData);
+    if (isEditMode && id) {
+      await dataService.updateProduct(id, productPayload);
+    } else {
+      await dataService.createProduct(productPayload);
+    }
+
     setIsLoading(false);
     navigate("/admin/products");
+  };
+
+  const handleDelete = async () => {
+    if (!id) return;
+    if (confirm(`Are you sure you want to delete product "${name}"?`)) {
+      setIsDeleting(true);
+      await dataService.deleteProduct(id);
+      setIsDeleting(false);
+      navigate("/admin/products");
+    }
   };
 
   return (
@@ -132,14 +184,28 @@ export const ProductForm: React.FC = () => {
           <ArrowLeft className="w-4 h-4" /> Back to Products Catalog
         </button>
 
-        <div>
-          <h1 className="text-2xl font-bold font-['Outfit'] text-slate-900 dark:text-white flex items-center gap-2">
-            <Coffee className="w-6 h-6 text-amber-500" />
-            Add Menu Product
-          </h1>
-          <p className="text-xs text-slate-500">
-            Configure dynamic pricing (Regular & Thirsty vs Standard) and unit mode (Quantity vs Gm/Kg Weight)
-          </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold font-['Outfit'] text-slate-900 dark:text-white flex items-center gap-2">
+              <Coffee className="w-6 h-6 text-amber-500" />
+              {isEditMode ? "Edit Menu Product" : "Add Menu Product"}
+            </h1>
+            <p className="text-xs text-slate-500">
+              Configure dynamic pricing (Regular & Thirsty vs Standard), stock inventory tracking, and images
+            </p>
+          </div>
+          {isEditMode && (
+            <Button
+              type="button"
+              variant="danger"
+              size="sm"
+              icon={<Trash2 className="w-4 h-4" />}
+              isLoading={isDeleting}
+              onClick={handleDelete}
+            >
+              Delete Item
+            </Button>
+          )}
         </div>
 
         <Card className="p-6">
@@ -167,7 +233,7 @@ export const ProductForm: React.FC = () => {
                 >
                   {categories.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.name} {c.has_regular_thirsty ? "(Regular & Thirsty Enabled)" : "(Standard Price)"}
+                      {c.name}
                     </option>
                   ))}
                 </select>
@@ -190,33 +256,48 @@ export const ProductForm: React.FC = () => {
 
               {isCategoryRegularThirsty ? (
                 /* Regular & Thirsty Inputs Display */
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                  <div>
-                    <Input
-                      label="Regular Price (₹) *"
-                      type="number"
-                      step="0.01"
-                      value={regularPrice}
-                      onChange={(e) => setRegularPrice(e.target.value)}
-                      placeholder="35"
-                      required
-                    />
-                    <span className="text-[10px] text-slate-400 mt-1 block">
-                      Standard serving size price
-                    </span>
+                <div className="space-y-3 pt-1">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Input
+                        label="Regular Price (₹) *"
+                        type="number"
+                        step="0.01"
+                        value={regularPrice}
+                        onChange={(e) => setRegularPrice(e.target.value)}
+                        placeholder="35"
+                        required
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Standard serving size price
+                      </span>
+                    </div>
+                    <div>
+                      <Input
+                        label="Thirsty Price (₹) *"
+                        type="number"
+                        step="0.01"
+                        value={thirstyPrice}
+                        onChange={(e) => setThirstyPrice(e.target.value)}
+                        placeholder="55"
+                        required
+                      />
+                      <span className="text-[10px] text-slate-400 mt-1 block">
+                        Large / Extra-thirst serving price
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <Input
-                      label="Thirsty Price (₹) *"
+                      label="Estimated Cost Price (₹)"
                       type="number"
                       step="0.01"
-                      value={thirstyPrice}
-                      onChange={(e) => setThirstyPrice(e.target.value)}
-                      placeholder="55"
-                      required
+                      value={costPrice}
+                      onChange={(e) => setCostPrice(e.target.value)}
+                      placeholder="15"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">
-                      Large / Extra-thirst serving price
+                      Ingredient cost (for gross margin estimation)
                     </span>
                   </div>
                 </div>
@@ -234,7 +315,7 @@ export const ProductForm: React.FC = () => {
                       required
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">
-                      Uniform price per unit
+                      Uniform 1 Qty price per unit
                     </span>
                   </div>
                   <div>
@@ -247,14 +328,14 @@ export const ProductForm: React.FC = () => {
                       placeholder="15"
                     />
                     <span className="text-[10px] text-slate-400 mt-1 block">
-                      Ingredient cost (for gross margin)
+                      Ingredient cost (for gross margin estimation)
                     </span>
                   </div>
                 </div>
               )}
             </div>
 
-            {/* DYNAMIC UNIT MEASUREMENT SECTION (QTY vs GM / KG) */}
+            {/* DYNAMIC UNIT MEASUREMENT & STOCK TRACKING SECTION */}
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                 <label className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
@@ -289,21 +370,61 @@ export const ProductForm: React.FC = () => {
                 </div>
               </div>
 
-              {/* Conditional Display: Qty field vs Gm / Kg fields */}
-              {unitMode === "QTY" ? (
-                <div>
-                  <Input
-                    label="Available Quantity (Stock in Cups / Pieces) *"
-                    type="number"
-                    value={stockQuantity}
-                    onChange={(e) => setStockQuantity(e.target.value)}
-                    placeholder="100"
-                    required
-                  />
-                  <span className="text-[10px] text-slate-400 mt-1 block">
-                    Decrements by 1 for each order ticket item
-                  </span>
+              {/* Stock Tracking Toggle for Quantity Mode */}
+              {unitMode === "QTY" && (
+                <div className="p-3.5 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="space-y-0.5">
+                    <label
+                      htmlFor="trackStockToggle"
+                      className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Package className="w-3.5 h-3.5 text-amber-600" />
+                      Track Stock Inventory for this Product
+                    </label>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                      {trackStock
+                        ? "Limited Stock: Stock quantity reduces automatically on each POS bill (e.g. Bun / Ben, Samosa, packaged snacks)."
+                        : "Unlimited Stock: Freshly made to order without inventory limits (e.g. Tea, Chai, Coffee)."}
+                    </span>
+                  </div>
+
+                  <label className="relative inline-flex items-center cursor-pointer shrink-0">
+                    <input
+                      type="checkbox"
+                      id="trackStockToggle"
+                      checked={trackStock}
+                      onChange={(e) => setTrackStock(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-11 h-6 bg-slate-300 peer-focus:outline-none rounded-full peer dark:bg-slate-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                  </label>
                 </div>
+              )}
+
+              {/* Conditional Display: Qty field vs Unlimited notice vs Weight fields */}
+              {unitMode === "QTY" ? (
+                trackStock ? (
+                  <div>
+                    <Input
+                      label="Available Quantity (Stock in Cups / Pieces) *"
+                      type="number"
+                      value={stockQuantity}
+                      onChange={(e) => setStockQuantity(e.target.value)}
+                      placeholder="e.g. 50"
+                      required
+                    />
+                    <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium mt-1 block">
+                      ✓ Stock will automatically reduce by the ordered count whenever this item is billed
+                    </span>
+                  </div>
+                ) : (
+                  <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 flex items-center gap-2 text-xs font-semibold text-emerald-800 dark:text-emerald-300">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>
+                      Unlimited Stock Active — This item (e.g. freshly brewed Chai/Tea) has no piece limit and will never run out of stock.
+                    </span>
+                  </div>
+                )
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div>
@@ -365,12 +486,12 @@ export const ProductForm: React.FC = () => {
             />
 
             <FileUpload
-              label="Product Image (Tea-Shop-Images)"
+              label="Product Image (Optional)"
               folder={storageService.getShopFolder(shop?.shop_code || shop?.slug, "products")}
               accept="image/*"
               value={imageUrl}
               onChange={setImageUrl}
-              helperText={`Stored in folder 'shops/${shop?.shop_code || shop?.slug || "general"}/products' in Supabase`}
+              helperText={`Optional image stored in folder 'shops/${shop?.shop_code || shop?.slug || "general"}/products' in Supabase`}
             />
 
             <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">
@@ -383,7 +504,7 @@ export const ProductForm: React.FC = () => {
                 Cancel
               </Button>
               <Button type="submit" variant="primary" isLoading={isLoading} className="flex-1">
-                Save Product Item
+                {isEditMode ? "Update Product" : "Save Product Item"}
               </Button>
             </div>
           </form>

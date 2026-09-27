@@ -15,6 +15,8 @@ import {
   TrendingUp,
   UserPlus,
   Users,
+  UserCheck,
+  ShieldCheck,
   CalendarCheck,
   BarChart2,
   Settings,
@@ -22,6 +24,7 @@ import {
   Menu,
   X,
   Store,
+  History,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -40,8 +43,8 @@ export const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
       items: [
         { label: "Dashboard", path: "/admin/dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
         { label: "POS Billing", path: "/admin/billing", icon: <Receipt className="w-4 h-4" /> },
-        { label: "Datepay & Tally", path: "/admin/datepay", icon: <TrendingUp className="w-4 h-4" /> },
-        { label: "Cash Drawer", path: "/admin/cash", icon: <Banknote className="w-4 h-4" /> },
+        { label: "Daily Cash & Datepay", path: "/admin/datepay", icon: <TrendingUp className="w-4 h-4" /> },
+        { label: "Datepay History", path: "/admin/datepay/history", icon: <History className="w-4 h-4" /> },
       ],
     },
     {
@@ -58,7 +61,9 @@ export const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
       title: "Finance & Team",
       items: [
         { label: "Daily Expenses", path: "/admin/expenses", icon: <DollarSign className="w-4 h-4" /> },
-        { label: "Staff Roster", path: "/admin/employees", icon: <Users className="w-4 h-4" /> },
+        { label: "Employee List", path: "/admin/employees", icon: <Users className="w-4 h-4" /> },
+        { label: "Add Employee", path: "/admin/employees/new", icon: <UserPlus className="w-4 h-4" /> },
+        { label: "Admin & Owner List", path: "/admin/admins", icon: <ShieldCheck className="w-4 h-4" /> },
         { label: "Add Co-Admin", path: "/admin/admins/new", icon: <UserPlus className="w-4 h-4" /> },
         { label: "Attendance", path: "/admin/attendance", icon: <CalendarCheck className="w-4 h-4" /> },
         { label: "Payroll & Salary", path: "/admin/salary", icon: <Banknote className="w-4 h-4" /> },
@@ -68,6 +73,8 @@ export const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
       title: "Intelligence",
       items: [
         { label: "Reports & P&L", path: "/admin/reports", icon: <BarChart2 className="w-4 h-4" /> },
+        { label: "User Bill Report", path: "/admin/reports/user-bills", icon: <UserCheck className="w-4 h-4" /> },
+        { label: "User Expense History", path: "/admin/reports/user-expenses", icon: <DollarSign className="w-4 h-4" /> },
         { label: "Shop Settings", path: "/admin/settings", icon: <Settings className="w-4 h-4" /> },
       ],
     },
@@ -114,31 +121,38 @@ export const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
 
         {/* Navigation Sections */}
         <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
-          {navSections.map((section, idx) => (
-            <div key={idx} className="space-y-1">
-              <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                {section.title}
-              </p>
-              {section.items.map((item) => {
-                const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
-                return (
-                  <Link
-                    key={item.path}
-                    to={item.path}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
-                      isActive
-                        ? "bg-amber-500 text-white shadow-sm shadow-amber-500/30"
-                        : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                    }`}
-                  >
-                    {item.icon}
-                    <span>{item.label}</span>
-                  </Link>
-                );
-              })}
-            </div>
-          ))}
+          {(() => {
+            const allNavPaths = navSections.flatMap((s) => s.items.map((i) => i.path));
+            return navSections.map((section, idx) => (
+              <div key={idx} className="space-y-1">
+                <p className="px-3 text-[10px] font-bold uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                  {section.title}
+                </p>
+                {section.items.map((item) => {
+                  const hasExactMatchElsewhere = allNavPaths.some((p) => p === location.pathname);
+                  const isActive =
+                    location.pathname === item.path ||
+                    (!hasExactMatchElsewhere && location.pathname.startsWith(`${item.path}/`));
+
+                  return (
+                    <Link
+                      key={item.path}
+                      to={item.path}
+                      onClick={() => setMobileOpen(false)}
+                      className={`flex items-center gap-3 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-semibold transition-all ${
+                        isActive
+                          ? "bg-amber-500 text-white shadow-sm shadow-amber-500/30"
+                          : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                    >
+                      {item.icon}
+                      <span>{item.label}</span>
+                    </Link>
+                  );
+                })}
+              </div>
+            ));
+          })()}
         </nav>
 
 

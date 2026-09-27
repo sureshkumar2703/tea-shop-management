@@ -1,9 +1,11 @@
-import React, { useState } from "react";
+import React, { useState, useMemo } from "react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { UserRole, Profile, Shop } from "@/types";
 import { dataService } from "@/services/supabaseService";
+import { Country, State, City } from "country-state-city";
+import { SearchableSelect } from "../ui/SearchableSelect";
 import { Lock, Eye, EyeOff } from "lucide-react";
 
 interface CreateUserModalProps {
@@ -23,43 +25,119 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [emailError, setEmailError] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneError, setPhoneError] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [address, setAddress] = useState("");
-  const [country, setCountry] = useState("India");
-  const [state, setState] = useState("Tamil Nadu");
+
+  const [countryCode, setCountryCode] = useState("IN");
+  const [countryName, setCountryName] = useState("India");
+  const [stateCode, setStateCode] = useState("TN");
+  const [stateName, setStateName] = useState("Tamil Nadu");
   const [district, setDistrict] = useState("Salem");
+
   const [role, setRole] = useState<UserRole>(defaultRole || "OWNER");
   const [shopId, setShopId] = useState(shops[0]?.id || "");
   const [salary, setSalary] = useState("25000");
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const countries = useMemo(() => Country.getAllCountries(), []);
+  const states = useMemo(() => (countryCode ? State.getStatesOfCountry(countryCode) : []), [countryCode]);
+  const cities = useMemo(
+    () => (countryCode && stateCode ? City.getCitiesOfState(countryCode, stateCode) : []),
+    [countryCode, stateCode]
+  );
+
+  const validateEmail = (val: string) => {
+    if (!val.trim()) {
+      setEmailError("Email address is required");
+      return false;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(val.trim())) {
+      setEmailError("Please enter a valid email address (e.g. name@domain.com)");
+      return false;
+    }
+    setEmailError("");
+    return true;
+  };
+
+  const handleCountryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setCountryName(val);
+    const found = countries.find(
+      (c) => c.name.toLowerCase() === val.toLowerCase() || c.isoCode.toLowerCase() === val.toLowerCase()
+    );
+    if (found) {
+      setCountryCode(found.isoCode);
+      setCountryName(found.name);
+      setStateCode("");
+      setStateName("");
+      setDistrict("");
+    } else {
+      setCountryCode("");
+      setStateCode("");
+      setStateName("");
+      setDistrict("");
+    }
+  };
+
+  const handleStateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setStateName(val);
+    const found = states.find(
+      (s) => s.name.toLowerCase() === val.toLowerCase() || s.isoCode.toLowerCase() === val.toLowerCase()
+    );
+    if (found) {
+      setStateCode(found.isoCode);
+      setStateName(found.name);
+      setDistrict("");
+    } else {
+      setStateCode("");
+      setDistrict("");
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage("");
-    if (!fullName || !email || !password) {
+
+    if (!fullName.trim() || !email.trim() || !password.trim()) {
       setErrorMessage("Please fill in all required fields including password.");
       return;
     }
+
+    if (!validateEmail(email)) {
+      setErrorMessage("Please enter a valid email address.");
+      return;
+    }
+
+    if (phone.length > 0 && phone.length !== 10) {
+      setPhoneError("Phone number must be exactly 10 digits");
+      setErrorMessage("Please enter a valid 10-digit phone number.");
+      return;
+    }
+
     setIsLoading(true);
 
     try {
-      const selectedShopId = shopId || (shops[0]?.id) || undefined;
+      const selectedShopId = shopId || shops[0]?.id || undefined;
       const targetRole: UserRole = role || "OWNER";
       let createdUser: Profile;
 
       if (targetRole === "EMPLOYEE") {
         createdUser = await dataService.createEmployee({
           shop_id: selectedShopId,
-          full_name: fullName,
+          full_name: fullName.trim(),
           email: email.trim().toLowerCase(),
           phone: phone.trim(),
           password: password,
           address: address.trim(),
-          country: country.trim(),
-          state: state.trim(),
+          country: countryName.trim(),
+          state: stateName.trim(),
           district: district.trim(),
           role: "EMPLOYEE",
           monthly_salary: parseFloat(salary) || 0,
@@ -67,13 +145,13 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
       } else {
         createdUser = await dataService.createAdmin({
           shop_id: selectedShopId,
-          full_name: fullName,
+          full_name: fullName.trim(),
           email: email.trim().toLowerCase(),
           phone: phone.trim(),
           password: password,
           address: address.trim(),
-          country: country.trim(),
-          state: state.trim(),
+          country: countryName.trim(),
+          state: stateName.trim(),
           district: district.trim(),
           role: targetRole,
           monthly_salary: parseFloat(salary) || 0,
@@ -116,18 +194,39 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
             label="Email Address *"
             type="email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value);
+              if (emailError) validateEmail(e.target.value);
+            }}
+            onBlur={() => validateEmail(email)}
             placeholder="priya@chaicraft.in"
+            error={emailError}
             required
           />
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Input
-            label="Phone Number"
+            label="Phone Number (10 Digits)"
+            type="tel"
             value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder="+91 98765 11223"
+            onChange={(e) => {
+              const cleaned = e.target.value.replace(/\D/g, "").slice(0, 10);
+              setPhone(cleaned);
+              if (cleaned.length > 0 && cleaned.length < 10) {
+                setPhoneError("Phone number must be exactly 10 digits");
+              } else {
+                setPhoneError("");
+              }
+            }}
+            onBlur={() => {
+              if (phone && phone.length !== 10) {
+                setPhoneError("Phone number must be exactly 10 digits");
+              }
+            }}
+            placeholder="9876511223"
+            maxLength={10}
+            error={phoneError}
           />
 
           {/* Password field */}
@@ -165,23 +264,71 @@ export const CreateUserModal: React.FC<CreateUserModalProps> = ({
         />
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <Input
+          <SearchableSelect
             label="Country"
-            value={country}
-            onChange={(e) => setCountry(e.target.value)}
-            placeholder="India"
+            value={countryName}
+            options={countries.map((c) => ({ value: c.isoCode, label: c.name }))}
+            onChange={(val, opt) => {
+              setCountryName(val);
+              if (opt) {
+                setCountryCode(opt.value);
+              } else {
+                const found = countries.find(
+                  (c) =>
+                    c.name.toLowerCase() === val.toLowerCase() ||
+                    c.isoCode.toLowerCase() === val.toLowerCase()
+                );
+                setCountryCode(found?.isoCode || "");
+              }
+              setStateCode("");
+              setStateName("");
+              setDistrict("");
+            }}
+            onClear={() => {
+              setCountryCode("");
+              setCountryName("");
+              setStateCode("");
+              setStateName("");
+              setDistrict("");
+            }}
+            placeholder="Type or select Country"
           />
-          <Input
+
+          <SearchableSelect
             label="State"
-            value={state}
-            onChange={(e) => setState(e.target.value)}
-            placeholder="Tamil Nadu"
+            value={stateName}
+            options={states.map((s) => ({ value: s.isoCode, label: s.name }))}
+            onChange={(val, opt) => {
+              setStateName(val);
+              if (opt) {
+                setStateCode(opt.value);
+              } else {
+                const found = states.find(
+                  (s) =>
+                    s.name.toLowerCase() === val.toLowerCase() ||
+                    s.isoCode.toLowerCase() === val.toLowerCase()
+                );
+                setStateCode(found?.isoCode || "");
+              }
+              setDistrict("");
+            }}
+            onClear={() => {
+              setStateCode("");
+              setStateName("");
+              setDistrict("");
+            }}
+            disabled={!countryCode}
+            placeholder={countryCode ? "Type or select State" : "Select Country first"}
           />
-          <Input
+
+          <SearchableSelect
             label="District / City"
             value={district}
-            onChange={(e) => setDistrict(e.target.value)}
-            placeholder="Salem"
+            options={cities.map((c) => ({ value: c.name, label: c.name }))}
+            onChange={(val) => setDistrict(val)}
+            onClear={() => setDistrict("")}
+            disabled={!stateCode}
+            placeholder={stateCode ? "Type or select District" : "Select State first"}
           />
         </div>
 

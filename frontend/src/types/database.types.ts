@@ -120,6 +120,8 @@ export interface Product {
   base_price: number;
   cost_price?: number;
   preparation_time_minutes?: number;
+  track_stock?: boolean;
+  is_unlimited?: boolean;
   is_available: boolean;
   is_active?: boolean;
   is_featured?: boolean;
@@ -154,14 +156,20 @@ export interface Supplier {
   id: string;
   shop_id: string;
   name: string;
+  company_name?: string;
+  product_name?: string;
   contact_person?: string;
   phone: string;
+  company_phone?: string;
   email?: string;
   address?: string;
+  company_address?: string;
   gst_number?: string;
   payment_terms?: string;
+  notes?: string;
   is_active: boolean;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface PurchaseItem {
@@ -178,6 +186,10 @@ export interface Purchase {
   id: string;
   shop_id: string;
   supplier_id?: string;
+  supplier_name?: string;
+  product_name?: string;
+  total_qty?: number;
+  quantity?: number;
   invoice_number?: string;
   purchase_date: string;
   total_amount: number;
@@ -185,6 +197,7 @@ export interface Purchase {
   payment_status: 'PAID' | 'PARTIAL' | 'PENDING';
   payment_method: PaymentMethod;
   notes?: string;
+  stock_added?: boolean;
   supplier?: Supplier;
   items?: PurchaseItem[];
   created_at: string;
@@ -193,15 +206,21 @@ export interface Purchase {
 export interface Expense {
   id: string;
   shop_id: string;
+  user_id?: string;
+  user?: Profile | { id?: string; name?: string; full_name?: string; email?: string };
   title: string;
   category: string;
   amount: number;
+  bill_amount?: number;
+  balance_amount?: number;
   payment_method: PaymentMethod;
   expense_date: string;
   receipt_url?: string;
   notes?: string;
+  status?: 'PENDING' | 'COMPLETED';
   created_by?: string;
   created_at: string;
+  updated_at?: string;
 }
 
 export interface OrderItemAddon {
@@ -235,6 +254,7 @@ export interface Order {
   shop_id: string;
   order_number: string;
   cashier_id?: string;
+  cashier_name?: string;
   customer_name?: string;
   customer_phone?: string;
   order_type: 'DINE_IN' | 'TAKEAWAY' | 'DELIVERY';
@@ -244,6 +264,8 @@ export interface Order {
   discount_amount: number;
   discount_reason?: string;
   total_amount: number;
+  received_amount?: number;
+  balance_amount?: number;
   payment_method: PaymentMethod;
   cash_amount?: number;
   gpay_amount?: number;

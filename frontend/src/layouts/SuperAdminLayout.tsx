@@ -71,7 +71,10 @@ export const SuperAdminLayout: React.FC<LayoutProps> = ({ children }) => {
         {/* Navigation Items */}
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
-            const isActive = location.pathname === item.path || location.pathname.startsWith(`${item.path}/`);
+            const hasExactMatchElsewhere = navItems.some((n) => n.path === location.pathname);
+            const isActive =
+              location.pathname === item.path ||
+              (!hasExactMatchElsewhere && location.pathname.startsWith(`${item.path}/`));
             return (
               <Link
                 key={item.path}

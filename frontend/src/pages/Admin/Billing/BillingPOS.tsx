@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { AdminLayout } from "@/layouts/AdminLayout";
 import { EmployeeLayout } from "@/layouts/EmployeeLayout";
 import { Card } from "@/components/ui/Card";
@@ -12,7 +13,6 @@ import { useRegisterStore } from "@/stores/registerStore";
 import { useAuthStore } from "@/stores/authStore";
 import { dataService } from "@/services/supabaseService";
 import { Product, ProductVariant, Category, Order, CartItemAddon } from "@/types";
-import { MOCK_ADDONS } from "@/services/mockData";
 import { formatCurrency, generateOrderNumber } from "@/lib/utils";
 import {
   Coffee,
@@ -29,6 +29,11 @@ import {
   Scale,
   Package,
   Layers,
+  ShoppingBag,
+  ChevronRight,
+  ArrowLeft,
+  Lock,
+  AlertTriangle,
 } from "lucide-react";
 
 interface BillingPOSProps {
@@ -37,6 +42,7 @@ interface BillingPOSProps {
 
 export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }) => {
   const { shop, user } = useAuthStore();
+  const [mobileTab, setMobileTab] = useState<"MENU" | "CART">("MENU");
   const {
     items,
     customerName,
@@ -58,10 +64,11 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
     getItemCount,
   } = useCartStore();
 
-  const { recordSale } = useRegisterStore();
+  const { isOpen: isRegisterOpen, todayDatepay, refreshRegister, recordSale } = useRegisterStore();
 
   const [categories, setCategories] = useState<Category[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [addons, setAddons] = useState<{ id: string; name: string; price: number; is_available: boolean }[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
 
@@ -86,18 +93,29 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
   const [receiptModalOpen, setReceiptModalOpen] = useState(false);
 
   useEffect(() => {
-    dataService.getCategories().then(setCategories);
-    dataService.getProducts().then(setProducts);
-  }, []);
+    dataService.getCategories(shop?.id, true).then(setCategories);
+    dataService.getProducts(shop?.id, true).then(setProducts);
+    dataService.getAddons(shop?.id).then(setAddons);
+    refreshRegister(shop?.id);
+  }, [shop?.id]);
 
-  const filteredProducts = products.filter((prod) => {
-    const matchesCat = selectedCategory === "ALL" || prod.category_id === selectedCategory;
-    const matchesSearch =
-      !searchQuery ||
-      prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      prod.sku?.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesCat && matchesSearch;
-  });
+  const activeCategories = useMemo(() => {
+    return categories.filter((c) => c.is_active !== false);
+  }, [categories]);
+
+  const filteredProducts = useMemo(() => {
+    return products.filter((prod) => {
+      const isActive = prod.is_active !== false && prod.is_available !== false;
+      if (!isActive) return false;
+
+      const matchesCat = selectedCategory === "ALL" || prod.category_id === selectedCategory;
+      const matchesSearch =
+        !searchQuery ||
+        prod.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        prod.sku?.toLowerCase().includes(searchQuery.toLowerCase());
+      return matchesCat && matchesSearch;
+    });
+  }, [products, selectedCategory, searchQuery]);
 
   const handleProductClick = (product: Product) => {
     const hasVariants = product.variants && product.variants.length > 0;
@@ -152,7 +170,6 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
       addCustomItem({
         product: selectedProduct,
         sizeVariant: selectedSizeVariant,
-        variantName: selectedSizeVariant,
         unitPrice: chosenPrice,
         addons: selectedAddons,
       });
@@ -173,6 +190,10 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
   };
 
   const openCheckoutModal = () => {
+    if (!isRegisterOpen) {
+      alert("⚠️ Today's register is CLOSED or Opening Cash Float has not been recorded yet. Please enter the Owner Daily Opening Cash in Datepay first.");
+      return;
+    }
     const total = getTotalAmount();
     const half = Math.round(total / 2);
     setSplitCash(half.toString());
@@ -216,11 +237,21 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
       }
     }
 
+    const parsedReceived =
+      paymentMethod === "CASH"
+        ? Math.max(parseFloat(receivedCash) || totalAmount, totalAmount)
+        : totalAmount;
+    const computedBalance =
+      paymentMethod === "CASH"
+        ? Math.max(0, (parseFloat(receivedCash) || totalAmount) - totalAmount)
+        : 0.00;
+
     const newOrder: Order = {
       id: `ord-${Date.now()}`,
       shop_id: shop?.id || "a1111111-1111-1111-1111-111111111111",
       order_number: orderNumber,
       cashier_id: user?.id,
+      cashier_name: user?.full_name || user?.email?.split("@")[0] || "Admin",
       customer_name: customerName || "Walk-in Guest",
       customer_phone: customerPhone || undefined,
       order_type: orderType,
@@ -230,6 +261,8 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
       discount_amount: discountAmount,
       discount_reason: discountReason || undefined,
       total_amount: totalAmount,
+      received_amount: parsedReceived,
+      balance_amount: computedBalance,
       payment_method: paymentMethod,
       cash_amount: finalCash,
       gpay_amount: finalGpay,
@@ -284,9 +317,77 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
 
   return (
     <LayoutWrapper>
-      <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-6rem)]">
-        {/* Left Side: Menu Grid & Categories (65% width) */}
-        <div className="flex-1 flex flex-col space-y-4 overflow-hidden">
+      {/* Closed Register Notice Banner */}
+      {!isRegisterOpen && (
+        <div className="mb-4 p-4 rounded-2xl bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 shadow-sm animate-fade-in">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-xl bg-rose-100 dark:bg-rose-900/60 text-rose-600 shrink-0">
+              <Lock className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-xs sm:text-sm font-bold text-rose-900 dark:text-rose-200">
+                Today's Register is CLOSED / Not Opened
+              </h3>
+              <p className="text-[11px] text-rose-700 dark:text-rose-300 mt-0.5">
+                Owner Opening Cash entry is required in Datepay before billing customers and processing orders.
+              </p>
+            </div>
+          </div>
+          {!isEmployeeView ? (
+            <Link
+              to="/admin/datepay"
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold text-xs shrink-0 transition-colors shadow-sm flex items-center gap-1.5"
+            >
+              Enter Opening Cash &rarr;
+            </Link>
+          ) : (
+            <span className="px-3 py-1 rounded-xl bg-rose-200/60 dark:bg-rose-900/50 text-rose-800 dark:text-rose-200 font-bold text-xs">
+              Waiting for Owner / Admin to Open Register
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Mobile Top View Tab Switcher (Visible only on screens < xl) */}
+      <div className="xl:hidden flex items-center bg-slate-100 dark:bg-slate-800/90 p-1.5 rounded-2xl mb-4 shrink-0 border border-slate-200 dark:border-slate-700">
+        <button
+          type="button"
+          onClick={() => setMobileTab("MENU")}
+          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+            mobileTab === "MENU"
+              ? "bg-amber-600 text-white shadow-md shadow-amber-600/30"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+          }`}
+        >
+          <Coffee className="w-4 h-4" />
+          <span>Menu Catalog</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setMobileTab("CART")}
+          className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${
+            mobileTab === "CART"
+              ? "bg-amber-600 text-white shadow-md shadow-amber-600/30"
+              : "text-slate-600 dark:text-slate-400 hover:text-slate-900"
+          }`}
+        >
+          <Receipt className="w-4 h-4" />
+          <span>Ticket ({getItemCount()})</span>
+          {getItemCount() > 0 && (
+            <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/25 text-white font-mono font-bold">
+              {formatCurrency(getTotalAmount())}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <div className="flex flex-col xl:flex-row gap-6 h-[calc(100vh-6rem)] relative">
+        {/* Left Side: Menu Grid & Categories (65% width on desktop, full width on mobile) */}
+        <div
+          className={`flex-1 flex-col space-y-4 overflow-hidden pb-16 xl:pb-0 ${
+            mobileTab === "MENU" ? "flex" : "hidden xl:flex"
+          }`}
+        >
           {/* Top Search & Filter Bar */}
           <div className="flex flex-col sm:flex-row items-center gap-3">
             <div className="w-full sm:flex-1 relative">
@@ -314,7 +415,7 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
             >
               All Items
             </button>
-            {categories.map((cat) => (
+            {activeCategories.map((cat) => (
               <button
                 key={cat.id}
                 onClick={() => setSelectedCategory(cat.id)}
@@ -402,22 +503,65 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
           </div>
         </div>
 
-        {/* Right Side: Fast POS Billing Ticket (35% width) */}
-        <Card className="w-full xl:w-96 flex flex-col h-full overflow-hidden p-0 border-slate-200 dark:border-slate-800 shadow-lg">
+        {/* Mobile Sticky Floating Cart Summary Bar */}
+        {mobileTab === "MENU" && getItemCount() > 0 && (
+          <div className="xl:hidden fixed bottom-4 left-4 right-4 z-40 animate-fade-in">
+            <button
+              type="button"
+              onClick={() => setMobileTab("CART")}
+              className="w-full py-3.5 px-4 rounded-2xl bg-gradient-to-r from-amber-600 to-amber-700 text-white font-bold flex items-center justify-between shadow-2xl shadow-amber-700/60 border border-amber-400/40 active:scale-[0.98] transition-all"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white">
+                  <ShoppingBag className="w-5 h-5" />
+                </div>
+                <div className="text-left">
+                  <span className="text-[11px] block font-medium opacity-90">
+                    {getItemCount()} items in ticket
+                  </span>
+                  <span className="text-base font-black font-mono">
+                    {formatCurrency(getTotalAmount())}
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs font-black bg-white/20 px-3.5 py-2 rounded-xl">
+                <span>View Cart & Pay</span>
+                <ChevronRight className="w-4 h-4" />
+              </div>
+            </button>
+          </div>
+        )}
+
+        {/* Right Side: Fast POS Billing Ticket (35% width on desktop, full view on mobile) */}
+        <Card
+          className={`w-full xl:w-96 flex-col h-full overflow-hidden p-0 border-slate-200 dark:border-slate-800 shadow-lg ${
+            mobileTab === "CART" ? "flex" : "hidden xl:flex"
+          }`}
+        >
           {/* Order Header */}
           <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 flex items-center justify-between shrink-0">
-            <div>
-              <div className="flex items-center gap-2">
-                <Receipt className="w-4 h-4 text-amber-600" />
+            <div className="flex items-center gap-2">
+              {mobileTab === "CART" && (
+                <button
+                  type="button"
+                  onClick={() => setMobileTab("MENU")}
+                  className="xl:hidden inline-flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 p-1.5 rounded-xl hover:bg-amber-50 dark:hover:bg-slate-800 border border-amber-500/20 mr-1"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Menu</span>
+                </button>
+              )}
+              <Receipt className="w-4 h-4 text-amber-600" />
+              <div>
                 <h2 className="font-bold text-sm text-slate-900 dark:text-white font-['Outfit']">
                   Active Ticket
                 </h2>
+                <span className="text-[11px] text-slate-400">{getItemCount()} items selected</span>
               </div>
-              <span className="text-[11px] text-slate-400">{getItemCount()} items selected</span>
             </div>
             <button
               onClick={clearCart}
-              className="text-xs font-semibold text-rose-500 hover:text-rose-700 transition-colors"
+              className="text-xs font-semibold text-rose-500 hover:text-rose-700 transition-colors px-2 py-1 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/40"
             >
               Clear
             </button>
@@ -531,13 +675,15 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
             </div>
 
             <Button
-              variant="primary"
+              variant={!isRegisterOpen ? "secondary" : "primary"}
               size="lg"
               className="w-full"
-              disabled={items.length === 0}
+              disabled={items.length === 0 || !isRegisterOpen}
               onClick={openCheckoutModal}
             >
-              Collect Payment &bull; {formatCurrency(getTotalAmount())}
+              {!isRegisterOpen
+                ? "Register Closed - Enter Opening Cash First"
+                : `Collect Payment • ${formatCurrency(getTotalAmount())}`}
             </Button>
           </div>
         </Card>
@@ -689,31 +835,33 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
               )}
 
             {/* Addons Selection */}
-            <div className="space-y-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
-                Spices & Custom Add-ons
-              </span>
-              <div className="grid grid-cols-2 gap-2">
-                {MOCK_ADDONS.map((addon) => {
-                  const isChecked = selectedAddons.some((a) => a.id === addon.id);
-                  return (
-                    <button
-                      key={addon.id}
-                      type="button"
-                      onClick={() => toggleAddon(addon)}
-                      className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between ${
-                        isChecked
-                          ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-bold"
-                          : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
-                      }`}
-                    >
-                      <span>{addon.name}</span>
-                      <span className="text-slate-400 font-semibold">+{formatCurrency(addon.price)}</span>
-                    </button>
-                  );
-                })}
+            {addons.length > 0 && (
+              <div className="space-y-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Spices & Custom Add-ons
+                </span>
+                <div className="grid grid-cols-2 gap-2">
+                  {addons.map((addon) => {
+                    const isChecked = selectedAddons.some((a) => a.id === addon.id);
+                    return (
+                      <button
+                        key={addon.id}
+                        type="button"
+                        onClick={() => toggleAddon(addon)}
+                        className={`p-2.5 rounded-xl border text-left text-xs transition-all flex items-center justify-between ${
+                          isChecked
+                            ? "border-emerald-500 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300 font-bold"
+                            : "border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300"
+                        }`}
+                      >
+                        <span>{addon.name}</span>
+                        <span className="text-slate-400 font-semibold">+{formatCurrency(addon.price)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
             <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <Button variant="secondary" onClick={() => setSelectedProduct(null)} className="flex-1">
@@ -735,7 +883,24 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
         description={`Ticket Total Due: ${formatCurrency(getTotalAmount())}`}
         size="md"
       >
-        <div className="space-y-5">
+        <div className="space-y-4">
+          {/* Customer Details Input */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-2xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-700">
+            <Input
+              label="Customer Name"
+              value={customerName}
+              onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
+              placeholder="e.g. Rahul / Walk-in Guest"
+            />
+            <Input
+              label="Customer Phone Number"
+              type="tel"
+              value={customerPhone}
+              onChange={(e) => setCustomerInfo(customerName, e.target.value)}
+              placeholder="e.g. 9876543210"
+            />
+          </div>
+
           {/* 3 Payment Modes Tab Selector */}
           <div className="grid grid-cols-3 gap-2">
             {[
@@ -794,15 +959,15 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
 
           {/* PAYMENT MODE 2: GOOGLE PAY (GPAY) */}
           {paymentMethod === "UPI_QR" && (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-center space-y-3">
-              <div className="w-40 h-40 mx-auto bg-white p-2 rounded-2xl border border-amber-200 shadow-md flex items-center justify-center">
+            <div className="rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200/60 dark:border-amber-900/40 text-center overflow-hidden">
+              <div className="w-full bg-white flex items-center justify-center border-b border-amber-200/60 dark:border-amber-900/40">
                 <img
                   src={gpayQrImage}
                   alt="Shop GPay QR Code"
-                  className="w-full h-full object-contain"
+                  className="w-full h-auto max-h-72 object-contain"
                 />
               </div>
-              <div>
+              <div className="p-3">
                 <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
                   Scan with Google Pay, PhonePe, Paytm, or any UPI App
                 </p>
@@ -877,33 +1042,17 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
 
               {/* Show GPay QR for the GPay portion */}
               {parseFloat(splitGpay) > 0 && (
-                <div className="p-3 rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-center space-y-2">
-                  <div className="w-28 h-28 mx-auto bg-white p-1 rounded-xl border flex items-center justify-center">
-                    <img src={gpayQrImage} alt="GPay QR" className="w-full h-full object-contain" />
+                <div className="rounded-xl bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 text-center overflow-hidden">
+                  <div className="w-full bg-white flex items-center justify-center border-b border-blue-100 dark:border-blue-900">
+                    <img src={gpayQrImage} alt="GPay QR" className="w-full h-auto max-h-56 object-contain" />
                   </div>
-                  <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
+                  <p className="text-[11px] font-bold text-slate-800 dark:text-slate-200 p-2">
                     Scan to pay GPay portion: {formatCurrency(parseFloat(splitGpay) || 0)}
                   </p>
                 </div>
               )}
             </div>
           )}
-
-          {/* Customer Details */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
-            <Input
-              label="Customer Name"
-              value={customerName}
-              onChange={(e) => setCustomerInfo(e.target.value, customerPhone)}
-              placeholder="Walk-in Guest"
-            />
-            <Input
-              label="Phone Number"
-              value={customerPhone}
-              onChange={(e) => setCustomerInfo(customerName, e.target.value)}
-              placeholder="+91 98765 00000"
-            />
-          </div>
 
           <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
             <Button

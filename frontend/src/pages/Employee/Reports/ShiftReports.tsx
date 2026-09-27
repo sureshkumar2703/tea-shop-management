@@ -90,7 +90,14 @@ export const ShiftReports: React.FC = () => {
 
   // Expense aggregates
   const totalExpensesCount = filteredExpenses.length;
-  const totalExpensesAmount = filteredExpenses.reduce((sum, e) => sum + (e.amount || 0), 0);
+  const totalExpensesAmount = filteredExpenses.reduce(
+    (sum, e) =>
+      sum +
+      (e.status === "COMPLETED" && e.bill_amount !== undefined && e.bill_amount > 0
+        ? Number(e.bill_amount)
+        : Number(e.amount || 0)),
+    0
+  );
 
   return (
     <EmployeeLayout>

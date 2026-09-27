@@ -14,6 +14,7 @@ import {
   UserRole,
   Datepay,
   PaymentMethod,
+  Purchase,
 } from "@/types";
 import {
   MOCK_CURRENT_SHOP,
@@ -23,6 +24,7 @@ import {
   MOCK_INVENTORY,
   MOCK_SUPPLIERS,
   MOCK_EXPENSES,
+  MOCK_PURCHASES,
   MOCK_ORDERS,
   MOCK_CASH_REGISTER,
   MOCK_EMPLOYEES,
@@ -30,36 +32,35 @@ import {
   MOCK_ATTENDANCE,
   MOCK_DATEPAYS,
 } from "./mockData";
+import { getLocalDateStr, isSameLocalDate } from "@/lib/utils";
 
-// Local storage keys for mutations during demo/offline state
+// In-memory runtime cache keys (NO localStorage persistence except chaicraft_auth_session)
 const STORAGE_KEYS = {
   SHOPS: "chaicraft_shops",
   CATEGORIES: "chaicraft_categories",
   PRODUCTS: "chaicraft_products",
   ORDERS: "chaicraft_orders",
   EXPENSES: "chaicraft_expenses",
+  PURCHASES: "chaicraft_purchases",
   INVENTORY: "chaicraft_inventory",
   EMPLOYEES: "chaicraft_employees",
+  SUPPLIERS: "chaicraft_suppliers",
   REGISTER: "chaicraft_register",
   DATEPAYS: "chaicraft_datepays",
   SALARIES: "chaicraft_salaries",
+  ADDONS: "chaicraft_addons",
 };
 
+// In-memory runtime cache for data session (NO localStorage persistence except chaicraft_auth_session)
+const memoryCache: Record<string, any> = {};
+
 function getStoredOr<T>(key: string, fallback: T): T {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : fallback;
-  } catch {
-    return fallback;
-  }
+  return memoryCache[key] !== undefined ? memoryCache[key] : fallback;
 }
 
 function setStored<T>(key: string, value: T): void {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (e) {
-    console.error("Storage write error", e);
-  }
+  // Store only in volatile memory during active app run, never in localStorage
+  memoryCache[key] = value;
 }
 
 export const dataService = {
@@ -206,22 +207,51 @@ export const dataService = {
   },
 
   // CATEGORIES
-  async getCategories(shopId?: string): Promise<Category[]> {
+  async getCategories(shopId?: string, onlyActive = false): Promise<Category[]> {
     try {
-      let query = supabase.from("categories").select("*").eq("is_active", true).order("sort_order", { ascending: true });
+      let query = supabase.from("categories").select("*");
       if (shopId) query = query.eq("shop_id", shopId);
-      const { data, error } = await query;
+      if (onlyActive) query = query.eq("is_active", true);
+      const { data, error } = await query.order("created_at", { ascending: false });
       if (!error && data && data.length > 0) return data as Category[];
+      if (error) {
+        console.warn("Supabase getCategories error:", error.message);
+      }
     } catch (e) {
       console.warn("Categories fallback", e);
     }
-    return getStoredOr(STORAGE_KEYS.CATEGORIES, MOCK_CATEGORIES);
+    const current = getStoredOr(STORAGE_KEYS.CATEGORIES, MOCK_CATEGORIES);
+    if (onlyActive) return current.filter((c) => c.is_active);
+    return current;
   },
 
   async createCategory(catData: Partial<Category>): Promise<Category> {
     try {
-      const { data, error } = await supabase.from("categories").insert([catData]).select().single();
+      const payload: any = {
+        name: catData.name,
+        description: catData.description || "",
+        has_regular_thirsty: catData.has_regular_thirsty ?? false,
+        regular_thirsty_types: catData.regular_thirsty_types || ["Regular", "Thirsty"],
+        is_active: catData.is_active ?? true,
+      };
+
+      if (catData.shop_id) payload.shop_id = catData.shop_id;
+      if (catData.slug) payload.slug = catData.slug;
+      if (catData.sort_order !== undefined) payload.sort_order = catData.sort_order;
+
+      const { data, error } = await supabase.from("categories").insert([payload]).select().single();
       if (!error && data) return data as Category;
+
+      // If failed due to optional columns like 'slug' or 'sort_order' missing in DB table, retry with minimal fields
+      if (error) {
+        console.error("Supabase createCategory error:", error.message, error.details);
+        if (error.message.includes("slug") || error.message.includes("sort_order")) {
+          delete payload.slug;
+          delete payload.sort_order;
+          const retryRes = await supabase.from("categories").insert([payload]).select().single();
+          if (!retryRes.error && retryRes.data) return retryRes.data as Category;
+        }
+      }
     } catch (e) {
       console.warn("Category create fallback", e);
     }
@@ -234,7 +264,7 @@ export const dataService = {
       has_regular_thirsty: catData.has_regular_thirsty || false,
       regular_thirsty_types: catData.regular_thirsty_types || ["Regular", "Thirsty"],
       sort_order: 1,
-      is_active: true,
+      is_active: catData.is_active ?? true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
@@ -243,23 +273,155 @@ export const dataService = {
     return newCat;
   },
 
-  // PRODUCTS
-  async getProducts(shopId?: string): Promise<Product[]> {
+  async updateCategory(id: string, catData: Partial<Category>): Promise<Category> {
     try {
-      let query = supabase.from("products").select("*, variants:product_variants(*)").eq("is_available", true);
+      const payload: any = {
+        updated_at: new Date().toISOString(),
+      };
+      if (catData.name !== undefined) payload.name = catData.name;
+      if (catData.description !== undefined) payload.description = catData.description;
+      if (catData.has_regular_thirsty !== undefined) payload.has_regular_thirsty = catData.has_regular_thirsty;
+      if (catData.regular_thirsty_types !== undefined) payload.regular_thirsty_types = catData.regular_thirsty_types;
+      if (catData.is_active !== undefined) payload.is_active = catData.is_active;
+      if (catData.shop_id !== undefined) payload.shop_id = catData.shop_id;
+      if (catData.slug !== undefined) payload.slug = catData.slug;
+      if (catData.sort_order !== undefined) payload.sort_order = catData.sort_order;
+
+      const { data, error } = await supabase.from("categories").update(payload).eq("id", id).select().single();
+      if (!error && data) return data as Category;
+      if (error) {
+        console.error("Supabase updateCategory error:", error.message, error.details);
+      }
+    } catch (e) {
+      console.warn("Category update fallback", e);
+    }
+    const current = getStoredOr(STORAGE_KEYS.CATEGORIES, MOCK_CATEGORIES);
+    const updated = current.map((c) => (c.id === id ? { ...c, ...catData, updated_at: new Date().toISOString() } : c));
+    setStored(STORAGE_KEYS.CATEGORIES, updated);
+    return updated.find((c) => c.id === id) as Category;
+  },
+
+  async deleteCategory(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from("categories").delete().eq("id", id);
+      if (!error) {
+        const current = getStoredOr(STORAGE_KEYS.CATEGORIES, MOCK_CATEGORIES);
+        setStored(STORAGE_KEYS.CATEGORIES, current.filter((c) => c.id !== id));
+        return true;
+      }
+      console.error("Supabase deleteCategory error:", error);
+    } catch (e) {
+      console.warn("Category delete fallback", e);
+    }
+    const current = getStoredOr(STORAGE_KEYS.CATEGORIES, MOCK_CATEGORIES);
+    setStored(STORAGE_KEYS.CATEGORIES, current.filter((c) => c.id !== id));
+    return true;
+  },
+
+  // ADDONS
+  async getAddons(shopId?: string): Promise<{ id: string; name: string; price: number; is_available: boolean }[]> {
+    try {
+      let query = supabase.from("addons").select("*").eq("is_available", true);
       if (shopId) query = query.eq("shop_id", shopId);
       const { data, error } = await query;
-      if (!error && data && data.length > 0) return data as Product[];
+      if (!error && data && data.length > 0) return data;
+    } catch (e) {
+      console.warn("Addons fallback", e);
+    }
+    return getStoredOr(STORAGE_KEYS.ADDONS, []);
+  },
+
+  // PRODUCTS
+  async getProducts(shopId?: string, onlyAvailable = false): Promise<Product[]> {
+    try {
+      let query = supabase.from("products").select("*, variants:product_variants(*)");
+      if (shopId) query = query.eq("shop_id", shopId);
+      if (onlyAvailable) query = query.eq("is_available", true);
+      const { data, error } = await query.order("created_at", { ascending: false });
+      if (!error && data && data.length > 0) {
+        return data.map((row: any) => ({
+          ...row,
+          is_active: row.is_active ?? row.is_available ?? true,
+          is_available: row.is_available ?? true,
+          track_stock: row.stock_quantity !== null && row.stock_quantity !== undefined,
+          is_unlimited: row.stock_quantity === null || row.stock_quantity === undefined,
+        })) as Product[];
+      }
     } catch (e) {
       console.warn("Products fallback", e);
     }
-    return getStoredOr(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    if (onlyAvailable) return current.filter((p) => p.is_available !== false && p.is_active !== false);
+    return current;
+  },
+
+  async getProductById(id: string): Promise<Product | null> {
+    try {
+      const { data, error } = await supabase.from("products").select("*, variants:product_variants(*)").eq("id", id).single();
+      if (!error && data) {
+        return {
+          ...data,
+          is_active: data.is_active ?? data.is_available ?? true,
+          is_available: data.is_available ?? true,
+          track_stock: data.stock_quantity !== null && data.stock_quantity !== undefined,
+          is_unlimited: data.stock_quantity === null || data.stock_quantity === undefined,
+        } as Product;
+      }
+    } catch (e) {
+      console.warn("getProductById fallback", e);
+    }
+    const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    return current.find((p) => p.id === id) || null;
   },
 
   async createProduct(productData: Partial<Product>): Promise<Product> {
     try {
-      const { data, error } = await supabase.from("products").insert([productData]).select().single();
-      if (!error && data) return data as Product;
+      const { variants, ...rest } = productData;
+      const payload: any = {
+        name: rest.name,
+        category_id: rest.category_id || null,
+        description: rest.description || "",
+        unit_mode: rest.unit_mode || "QTY",
+        weight_unit: rest.weight_unit || "GM",
+        stock_quantity: rest.track_stock === false ? null : (rest.stock_quantity ?? 100),
+        available_weight: rest.available_weight ?? 0,
+        price_mode: rest.price_mode || "STANDARD",
+        regular_price: rest.regular_price || 0,
+        thirsty_price: rest.thirsty_price || 0,
+        base_price: rest.base_price || 0,
+        cost_price: rest.cost_price || 0,
+        image_url: rest.image_url || null,
+        is_available: rest.is_available !== false,
+      };
+      if (rest.shop_id) payload.shop_id = rest.shop_id;
+      if (rest.sku) payload.sku = rest.sku;
+      if (rest.preparation_time_minutes) payload.preparation_time_minutes = rest.preparation_time_minutes;
+
+      const { data, error } = await supabase.from("products").insert([payload]).select().single();
+      if (!error && data) {
+        let insertedVariants: any[] = [];
+        if (variants && variants.length > 0) {
+          const varRows = variants.map((v) => ({
+            product_id: data.id,
+            shop_id: data.shop_id,
+            name: v.name,
+            price: v.price,
+            cost_price: v.cost_price || 0,
+            is_default: v.is_default ?? false,
+          }));
+          const { data: vData } = await supabase.from("product_variants").insert(varRows).select();
+          if (vData) insertedVariants = vData;
+        }
+        return {
+          ...data,
+          track_stock: data.stock_quantity !== null && data.stock_quantity !== undefined,
+          is_unlimited: data.stock_quantity === null || data.stock_quantity === undefined,
+          variants: insertedVariants.length > 0 ? insertedVariants : variants || [],
+        } as Product;
+      }
+      if (error) {
+        console.error("Supabase createProduct error:", error.message, error.details);
+      }
     } catch (e) {
       console.warn("Product create fallback", e);
     }
@@ -272,7 +434,9 @@ export const dataService = {
       description: productData.description || "",
       unit_mode: productData.unit_mode || "QTY",
       weight_unit: productData.weight_unit || "GM",
-      stock_quantity: productData.stock_quantity ?? 100,
+      track_stock: productData.track_stock,
+      is_unlimited: productData.track_stock === false,
+      stock_quantity: productData.track_stock === false ? undefined : (productData.stock_quantity ?? 100),
       available_weight: productData.available_weight ?? 0,
       price_mode: productData.price_mode || "STANDARD",
       regular_price: productData.regular_price,
@@ -291,6 +455,123 @@ export const dataService = {
     const current = getStoredOr(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
     setStored(STORAGE_KEYS.PRODUCTS, [newProd, ...current]);
     return newProd;
+  },
+
+  async updateProduct(id: string, productData: Partial<Product>): Promise<Product> {
+    try {
+      const { variants, ...rest } = productData;
+      const payload: any = {
+        updated_at: new Date().toISOString(),
+      };
+
+      if (rest.name !== undefined) payload.name = rest.name;
+      if (rest.category_id !== undefined) payload.category_id = rest.category_id || null;
+      if (rest.description !== undefined) payload.description = rest.description || "";
+      if (rest.unit_mode !== undefined) payload.unit_mode = rest.unit_mode;
+      if (rest.weight_unit !== undefined) payload.weight_unit = rest.weight_unit;
+      
+      // Stock quantity handling: If track_stock is false, explicitly set to null in DB
+      if (rest.track_stock !== undefined) {
+        payload.stock_quantity = rest.track_stock === false ? null : (rest.stock_quantity !== undefined ? rest.stock_quantity : null);
+      } else if (rest.stock_quantity !== undefined) {
+        payload.stock_quantity = rest.stock_quantity;
+      }
+
+      if (rest.available_weight !== undefined) payload.available_weight = rest.available_weight;
+      if (rest.price_mode !== undefined) payload.price_mode = rest.price_mode;
+      if (rest.regular_price !== undefined) payload.regular_price = rest.regular_price;
+      if (rest.thirsty_price !== undefined) payload.thirsty_price = rest.thirsty_price;
+      if (rest.base_price !== undefined) payload.base_price = rest.base_price;
+      if (rest.cost_price !== undefined) payload.cost_price = rest.cost_price;
+      if (rest.image_url !== undefined) payload.image_url = rest.image_url;
+      if (rest.is_available !== undefined) payload.is_available = rest.is_available;
+      if (rest.sku !== undefined) payload.sku = rest.sku;
+      if (rest.preparation_time_minutes !== undefined) payload.preparation_time_minutes = rest.preparation_time_minutes;
+
+      const { data, error } = await supabase.from("products").update(payload).eq("id", id).select().single();
+      if (error) {
+        console.error("Supabase updateProduct error:", error.message, error.details);
+      }
+      if (!error && data) {
+        if (variants && variants.length > 0) {
+          await supabase.from("product_variants").delete().eq("product_id", id);
+          const varRows = variants.map((v) => ({
+            product_id: id,
+            shop_id: data.shop_id,
+            name: v.name,
+            price: v.price,
+            cost_price: v.cost_price || 0,
+            is_default: v.is_default ?? false,
+          }));
+          const { data: vData } = await supabase.from("product_variants").insert(varRows).select();
+          return {
+            ...data,
+            track_stock: data.stock_quantity !== null && data.stock_quantity !== undefined,
+            is_unlimited: data.stock_quantity === null || data.stock_quantity === undefined,
+            variants: vData || variants,
+          } as Product;
+        }
+        return {
+          ...data,
+          track_stock: data.stock_quantity !== null && data.stock_quantity !== undefined,
+          is_unlimited: data.stock_quantity === null || data.stock_quantity === undefined,
+        } as Product;
+      }
+    } catch (e) {
+      console.warn("Product update fallback", e);
+    }
+    const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    const updated = current.map((p) => (p.id === id ? { ...p, ...productData, updated_at: new Date().toISOString() } : p));
+    setStored(STORAGE_KEYS.PRODUCTS, updated);
+    return updated.find((p) => p.id === id) || (productData as Product);
+  },
+
+  async updateProductStock(id: string, newStock: number, availableWeight?: number): Promise<Product> {
+    return this.updateProduct(id, {
+      stock_quantity: newStock,
+      available_weight: availableWeight,
+      track_stock: true,
+    });
+  },
+
+  async updateProductStatus(id: string, isAvailable: boolean): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from("products")
+        .update({ is_available: isAvailable, is_active: isAvailable, updated_at: new Date().toISOString() })
+        .eq("id", id);
+      if (!error) {
+        const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+        const updated = current.map((p) => (p.id === id ? { ...p, is_available: isAvailable, is_active: isAvailable } : p));
+        setStored(STORAGE_KEYS.PRODUCTS, updated);
+        return true;
+      }
+      if (error) {
+        console.error("Supabase updateProductStatus error:", error.message);
+      }
+    } catch (e) {
+      console.warn("updateProductStatus fallback", e);
+    }
+    const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    const updated = current.map((p) => (p.id === id ? { ...p, is_available: isAvailable, is_active: isAvailable } : p));
+    setStored(STORAGE_KEYS.PRODUCTS, updated);
+    return true;
+  },
+
+  async deleteProduct(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from("products").delete().eq("id", id);
+      if (!error) {
+        const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+        setStored(STORAGE_KEYS.PRODUCTS, current.filter((p) => p.id !== id));
+        return true;
+      }
+    } catch (e) {
+      console.warn("Product delete fallback", e);
+    }
+    const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    setStored(STORAGE_KEYS.PRODUCTS, current.filter((p) => p.id !== id));
+    return true;
   },
 
   // INVENTORY
@@ -318,53 +599,299 @@ export const dataService = {
   },
 
   // SUPPLIERS
-  async getSuppliers(shopId?: string): Promise<Supplier[]> {
+  async getSuppliers(shopId?: string, onlyActive = false): Promise<Supplier[]> {
     try {
-      let query = supabase.from("suppliers").select("*").eq("is_active", true);
+      let query = supabase.from("suppliers").select("*");
       if (shopId) query = query.eq("shop_id", shopId);
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) return data as Supplier[];
+      if (onlyActive) query = query.eq("is_active", true);
+      const { data, error } = await query.order("created_at", { ascending: false });
+      if (!error && data && data.length > 0) {
+        return data.map((row: any) => ({
+          ...row,
+          company_name: row.company_name || row.name,
+          company_address: row.company_address || row.address,
+          company_phone: row.company_phone || row.phone,
+          product_name: row.product_name || row.notes || "",
+        })) as Supplier[];
+      }
+      if (error) {
+        console.warn("Supabase getSuppliers error:", error.message);
+      }
     } catch (e) {
       console.warn("Suppliers fallback", e);
     }
-    return MOCK_SUPPLIERS;
+    const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+    if (onlyActive) return current.filter((s) => s.is_active !== false);
+    return current;
+  },
+
+  async createSupplier(supData: Partial<Supplier>): Promise<Supplier> {
+    const targetShopId = supData.shop_id || MOCK_CURRENT_SHOP.id;
+    const companyName = supData.company_name || supData.name || "Unnamed Supplier";
+    const companyAddress = supData.company_address || supData.address || "";
+    const companyPhone = supData.company_phone || supData.phone || "";
+    const productName = supData.product_name || supData.notes || "";
+
+    const payload: any = {
+      shop_id: targetShopId,
+      name: companyName,
+      contact_person: supData.contact_person || "",
+      phone: companyPhone,
+      email: supData.email || "",
+      address: companyAddress,
+      notes: productName,
+      payment_terms: supData.payment_terms || "Net 15",
+      is_active: supData.is_active ?? true,
+    };
+
+    try {
+      const { data, error } = await supabase.from("suppliers").insert([payload]).select().single();
+      if (!error && data) {
+        const fullSupplier: Supplier = {
+          ...data,
+          company_name: data.company_name || data.name,
+          company_address: data.company_address || data.address,
+          company_phone: data.company_phone || data.phone,
+          product_name: data.product_name || data.notes || productName,
+        };
+        const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+        setStored(STORAGE_KEYS.SUPPLIERS, [fullSupplier, ...current]);
+        return fullSupplier;
+      }
+      if (error) {
+        console.error("Supabase createSupplier error:", error.message, error.details);
+      }
+    } catch (e) {
+      console.warn("Supplier create fallback", e);
+    }
+
+    const newSup: Supplier = {
+      id: `sup-${Date.now()}`,
+      shop_id: targetShopId,
+      name: companyName,
+      company_name: companyName,
+      product_name: productName,
+      contact_person: supData.contact_person || "",
+      phone: companyPhone,
+      company_phone: companyPhone,
+      email: supData.email || "",
+      address: companyAddress,
+      company_address: companyAddress,
+      payment_terms: supData.payment_terms || "Net 15",
+      is_active: supData.is_active ?? true,
+      created_at: new Date().toISOString(),
+    };
+    const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+    setStored(STORAGE_KEYS.SUPPLIERS, [newSup, ...current]);
+    return newSup;
+  },
+
+  async updateSupplier(id: string, supData: Partial<Supplier>): Promise<Supplier> {
+    const payload: any = {
+      updated_at: new Date().toISOString(),
+    };
+    if (supData.name !== undefined || supData.company_name !== undefined) {
+      payload.name = supData.company_name || supData.name;
+    }
+    if (supData.contact_person !== undefined) payload.contact_person = supData.contact_person;
+    if (supData.phone !== undefined || supData.company_phone !== undefined) {
+      payload.phone = supData.company_phone || supData.phone;
+    }
+    if (supData.email !== undefined) payload.email = supData.email;
+    if (supData.address !== undefined || supData.company_address !== undefined) {
+      payload.address = supData.company_address || supData.address;
+    }
+    if (supData.notes !== undefined || supData.product_name !== undefined) {
+      payload.notes = supData.product_name || supData.notes;
+    }
+    if (supData.payment_terms !== undefined) payload.payment_terms = supData.payment_terms;
+    if (supData.is_active !== undefined) payload.is_active = supData.is_active;
+
+    try {
+      const { data, error } = await supabase.from("suppliers").update(payload).eq("id", id).select().single();
+      if (!error && data) {
+        const fullSupplier: Supplier = {
+          ...data,
+          company_name: data.company_name || data.name,
+          company_address: data.company_address || data.address,
+          company_phone: data.company_phone || data.phone,
+          product_name: data.product_name || data.notes || supData.product_name,
+        };
+        const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+        const updated = current.map((s) => (s.id === id ? { ...s, ...fullSupplier } : s));
+        setStored(STORAGE_KEYS.SUPPLIERS, updated);
+        return fullSupplier;
+      }
+      if (error) {
+        console.error("Supabase updateSupplier error:", error.message);
+      }
+    } catch (e) {
+      console.warn("Supplier update fallback", e);
+    }
+
+    const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+    const updated = current.map((s) => (s.id === id ? { ...s, ...supData, updated_at: new Date().toISOString() } : s));
+    setStored(STORAGE_KEYS.SUPPLIERS, updated);
+    return updated.find((s) => s.id === id) as Supplier;
+  },
+
+  async updateSupplierStatus(id: string, isActive: boolean): Promise<boolean> {
+    try {
+      const { error } = await supabase.from("suppliers").update({ is_active: isActive, updated_at: new Date().toISOString() }).eq("id", id);
+      if (!error) {
+        const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+        const updated = current.map((s) => (s.id === id ? { ...s, is_active: isActive } : s));
+        setStored(STORAGE_KEYS.SUPPLIERS, updated);
+        return true;
+      }
+      console.error("Supabase updateSupplierStatus error:", error);
+    } catch (e) {
+      console.warn("Supplier status update fallback", e);
+    }
+    const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+    const updated = current.map((s) => (s.id === id ? { ...s, is_active: isActive } : s));
+    setStored(STORAGE_KEYS.SUPPLIERS, updated);
+    return true;
+  },
+
+  async deleteSupplier(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from("suppliers").delete().eq("id", id);
+      if (!error) {
+        const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+        setStored(STORAGE_KEYS.SUPPLIERS, current.filter((s) => s.id !== id));
+        return true;
+      }
+    } catch (e) {
+      console.warn("Supplier delete fallback", e);
+    }
+    const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
+    setStored(STORAGE_KEYS.SUPPLIERS, current.filter((s) => s.id !== id));
+    return true;
   },
 
   // EXPENSES
   async getExpenses(shopId?: string): Promise<Expense[]> {
     try {
-      let query = supabase.from("expenses").select("*").order("expense_date", { ascending: false });
+      let query = supabase.from("expenses").select("*, user:user_id(id, name, email)").order("expense_date", { ascending: false }).order("created_at", { ascending: false });
       if (shopId) query = query.eq("shop_id", shopId);
       const { data, error } = await query;
       if (!error && data && data.length > 0) return data as Expense[];
+
+      // Fallback query if foreign key user join is not mapped yet
+      if (error) {
+        let fallbackQuery = supabase.from("expenses").select("*").order("expense_date", { ascending: false });
+        if (shopId) fallbackQuery = fallbackQuery.eq("shop_id", shopId);
+        const { data: fbData, error: fbErr } = await fallbackQuery;
+        if (!fbErr && fbData && fbData.length > 0) return fbData as Expense[];
+      }
     } catch (e) {
       console.warn("Expenses fallback", e);
     }
-    return getStoredOr(STORAGE_KEYS.EXPENSES, MOCK_EXPENSES);
+    return getStoredOr(STORAGE_KEYS.EXPENSES, []);
   },
 
   async createExpense(expenseData: Partial<Expense>): Promise<Expense> {
+    const amountVal = parseFloat(String(expenseData.amount)) || 0;
+    const billAmountVal = parseFloat(String(expenseData.bill_amount)) || 0;
+    const balanceAmountVal = expenseData.balance_amount !== undefined 
+      ? parseFloat(String(expenseData.balance_amount)) 
+      : (amountVal - billAmountVal);
+    const statusVal = expenseData.status || (billAmountVal > 0 ? "COMPLETED" : "PENDING");
+
+    const payload: any = {
+      shop_id: expenseData.shop_id || MOCK_CURRENT_SHOP.id,
+      user_id: expenseData.user_id || expenseData.created_by || null,
+      created_by: expenseData.user_id || expenseData.created_by || null,
+      title: expenseData.title || "Store Expense",
+      category: expenseData.category || "Misc",
+      amount: amountVal,
+      bill_amount: billAmountVal,
+      balance_amount: balanceAmountVal,
+      payment_method: expenseData.payment_method || "CASH",
+      expense_date: expenseData.expense_date || new Date().toISOString().split("T")[0],
+      receipt_url: expenseData.receipt_url || null,
+      notes: expenseData.notes || "",
+      status: statusVal,
+    };
+
     try {
-      const { data, error } = await supabase.from("expenses").insert([expenseData]).select().single();
+      const { data, error } = await supabase.from("expenses").insert([payload]).select().single();
       if (!error && data) return data as Expense;
+      if (error) {
+        console.warn("Expense insert full payload error, trying base columns:", error.message);
+        const basePayload: any = {
+          shop_id: payload.shop_id,
+          title: payload.title,
+          category: payload.category,
+          amount: payload.amount,
+          payment_method: payload.payment_method,
+          expense_date: payload.expense_date,
+          receipt_url: payload.receipt_url,
+          notes: payload.notes,
+        };
+        const { data: baseData, error: baseErr } = await supabase.from("expenses").insert([basePayload]).select().single();
+        if (!baseErr && baseData) return { ...baseData, ...payload } as Expense;
+      }
     } catch (e) {
       console.warn("Expense create fallback", e);
     }
     const newExp: Expense = {
       id: `exp-${Date.now()}`,
-      shop_id: expenseData.shop_id || MOCK_CURRENT_SHOP.id,
-      title: expenseData.title || "Miscellaneous Expense",
-      category: expenseData.category || "Misc",
-      amount: expenseData.amount || 0,
-      payment_method: expenseData.payment_method || "CASH",
-      receipt_url: expenseData.receipt_url,
-      expense_date: expenseData.expense_date || new Date().toISOString().split("T")[0],
-      notes: expenseData.notes || "",
+      ...payload,
       created_at: new Date().toISOString(),
     };
-    const current = getStoredOr(STORAGE_KEYS.EXPENSES, MOCK_EXPENSES);
+    const current = getStoredOr(STORAGE_KEYS.EXPENSES, []);
     setStored(STORAGE_KEYS.EXPENSES, [newExp, ...current]);
     return newExp;
+  },
+
+  async updateExpense(id: string, expenseData: Partial<Expense>): Promise<Expense> {
+    const amountVal = expenseData.amount !== undefined ? parseFloat(String(expenseData.amount)) : undefined;
+    const billAmountVal = expenseData.bill_amount !== undefined ? parseFloat(String(expenseData.bill_amount)) : undefined;
+    let balanceAmountVal = expenseData.balance_amount;
+    if (balanceAmountVal === undefined && amountVal !== undefined && billAmountVal !== undefined) {
+      balanceAmountVal = amountVal - billAmountVal;
+    }
+
+    const payload: any = {
+      ...expenseData,
+      updated_at: new Date().toISOString(),
+    };
+    if (amountVal !== undefined) payload.amount = amountVal;
+    if (billAmountVal !== undefined) payload.bill_amount = billAmountVal;
+    if (balanceAmountVal !== undefined) payload.balance_amount = balanceAmountVal;
+
+    try {
+      const { data, error } = await supabase.from("expenses").update(payload).eq("id", id).select().single();
+      if (!error && data) return data as Expense;
+      if (error) {
+        console.warn("Expense update error:", error.message);
+      }
+    } catch (e) {
+      console.warn("Expense update fallback", e);
+    }
+
+    const current = getStoredOr<Expense[]>(STORAGE_KEYS.EXPENSES, []);
+    const updated = current.map((item) => (item.id === id ? { ...item, ...payload } : item));
+    setStored(STORAGE_KEYS.EXPENSES, updated);
+    return updated.find((item) => item.id === id) || (payload as Expense);
+  },
+
+  async deleteExpense(id: string): Promise<boolean> {
+    try {
+      const { error } = await supabase.from("expenses").delete().eq("id", id);
+      if (!error) {
+        const current = getStoredOr<Expense[]>(STORAGE_KEYS.EXPENSES, []);
+        setStored(STORAGE_KEYS.EXPENSES, current.filter((e) => e.id !== id));
+        return true;
+      }
+    } catch (e) {
+      console.warn("Expense delete fallback", e);
+    }
+    const current = getStoredOr<Expense[]>(STORAGE_KEYS.EXPENSES, []);
+    setStored(STORAGE_KEYS.EXPENSES, current.filter((e) => e.id !== id));
+    return true;
   },
 
   // ORDERS & POS BILLING
@@ -382,30 +909,111 @@ export const dataService = {
 
   async createOrder(order: Order): Promise<Order> {
     try {
-      const { data, error } = await supabase.from("orders").insert([{
+      const orderPayload: any = {
         shop_id: order.shop_id,
         order_number: order.order_number,
-        customer_name: order.customer_name,
-        customer_phone: order.customer_phone,
+        cashier_id: order.cashier_id || null,
+        cashier_name: order.cashier_name || null,
+        customer_name: order.customer_name || "Walk-in Guest",
+        customer_phone: order.customer_phone || null,
         order_type: order.order_type,
         subtotal: order.subtotal,
         tax_rate: order.tax_rate,
         tax_amount: order.tax_amount,
         discount_amount: order.discount_amount,
+        discount_reason: order.discount_reason || null,
         total_amount: order.total_amount,
+        received_amount: order.received_amount !== undefined ? order.received_amount : order.total_amount,
+        balance_amount: order.balance_amount !== undefined ? order.balance_amount : 0.00,
         payment_method: order.payment_method,
+        cash_amount: order.cash_amount || (order.payment_method === "CASH" ? order.total_amount : 0),
+        gpay_amount: order.gpay_amount || (order.payment_method === "UPI_QR" ? order.total_amount : 0),
+        is_split_payment: order.is_split_payment || order.payment_method === "SPLIT",
         payment_status: order.payment_status,
         status: order.status,
-      }]).select().single();
+      };
+
+      let { data, error } = await supabase.from("orders").insert([orderPayload]).select().single();
+      if (error && (error.message?.includes("received_amount") || error.message?.includes("balance_amount") || error.message?.includes("cashier_name"))) {
+        // Fallback without new columns if migration not yet run
+        const legacyPayload = { ...orderPayload };
+        delete legacyPayload.received_amount;
+        delete legacyPayload.balance_amount;
+        delete legacyPayload.cashier_name;
+        const retry = await supabase.from("orders").insert([legacyPayload]).select().single();
+        data = retry.data;
+        error = retry.error;
+      }
       if (!error && data) {
-        return { ...order, id: data.id };
+        const orderId = data.id;
+        // Insert order items if present
+        if (order.items && order.items.length > 0) {
+          const itemPayloads = order.items.map((item) => ({
+            order_id: orderId,
+            product_id: item.product_id || null,
+            variant_id: item.variant_id || null,
+            product_name: item.product_name,
+            variant_name: item.variant_name || null,
+            size_variant: item.size_variant || null,
+            unit_mode: item.unit_mode || "QTY",
+            weight_grams: item.weight_grams || null,
+            weight_kg: item.weight_kg || null,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            subtotal: item.subtotal,
+          }));
+          await supabase.from("order_items").insert(itemPayloads);
+
+          // Deduct stock for tracked items
+          for (const item of order.items) {
+            if (item.product_id) {
+              await this.deductProductStock(item.product_id, item.quantity);
+            }
+          }
+        }
+        return { ...order, id: orderId };
       }
     } catch (e) {
       console.warn("Order insert fallback", e);
     }
     const current = getStoredOr(STORAGE_KEYS.ORDERS, MOCK_ORDERS);
     setStored(STORAGE_KEYS.ORDERS, [order, ...current]);
+
+    // Deduct stock in fallback local storage
+    if (order.items && order.items.length > 0) {
+      for (const item of order.items) {
+        if (item.product_id) {
+          await this.deductProductStock(item.product_id, item.quantity);
+        }
+      }
+    }
     return order;
+  },
+
+  async deductProductStock(productId: string, quantity: number): Promise<void> {
+    try {
+      const { data: prod, error } = await supabase.from("products").select("id, stock_quantity").eq("id", productId).single();
+      if (!error && prod && prod.stock_quantity !== null && prod.stock_quantity !== undefined) {
+        const curStock = parseFloat(String(prod.stock_quantity));
+        if (!isNaN(curStock)) {
+          const newStock = Math.max(0, curStock - quantity);
+          await supabase.from("products").update({ stock_quantity: newStock, updated_at: new Date().toISOString() }).eq("id", productId);
+        }
+      }
+    } catch (e) {
+      console.warn("Product stock deduction in supabase fallback", e);
+    }
+    const currentProds = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
+    const updatedProds = currentProds.map((p) => {
+      if (p.id === productId && p.stock_quantity !== null && p.stock_quantity !== undefined) {
+        const cur = parseFloat(String(p.stock_quantity));
+        if (!isNaN(cur)) {
+          return { ...p, stock_quantity: Math.max(0, cur - quantity) };
+        }
+      }
+      return p;
+    });
+    setStored(STORAGE_KEYS.PRODUCTS, updatedProds);
   },
 
   // CASH REGISTER
@@ -459,7 +1067,9 @@ export const dataService = {
     } catch (e) {
       console.warn("Users query fallback", e);
     }
-    return getStoredOr(STORAGE_KEYS.EMPLOYEES, MOCK_EMPLOYEES);
+    const current = getStoredOr<Profile[]>(STORAGE_KEYS.EMPLOYEES, MOCK_EMPLOYEES);
+    if (shopId) return current.filter((e) => e.shop_id === shopId);
+    return current;
   },
 
   async updateUserStatus(userId: string, isActive: boolean): Promise<boolean> {
@@ -655,38 +1265,94 @@ export const dataService = {
     return getStoredOr(STORAGE_KEYS.DATEPAYS, MOCK_DATEPAYS);
   },
 
-  async saveDatepay(datepayData: Partial<Datepay>): Promise<Datepay> {
+  async getTodayDatepay(shopId?: string, dateStr?: string): Promise<Datepay | null> {
+    const targetDate = dateStr || getLocalDateStr(new Date());
     try {
-      const { data, error } = await supabase.from("datepays").upsert([datepayData]).select().single();
-      if (!error && data) return data as Datepay;
+      let query = supabase.from("datepays").select("*").eq("date", targetDate);
+      if (shopId) query = query.eq("shop_id", shopId);
+      const { data, error } = await query.order("created_at", { ascending: false }).limit(1);
+      if (!error && data && data.length > 0) return data[0] as Datepay;
+    } catch (e) {
+      console.warn("getTodayDatepay fallback", e);
+    }
+    const current = getStoredOr<Datepay[]>(STORAGE_KEYS.DATEPAYS, MOCK_DATEPAYS);
+    const found = current.find((d) => isSameLocalDate(d.date, targetDate) && (!shopId || d.shop_id === shopId));
+    return found || null;
+  },
+
+  async saveDatepay(datepayData: Partial<Datepay>): Promise<Datepay> {
+    const targetDate = datepayData.date || getLocalDateStr(new Date());
+    const shopId = datepayData.shop_id || MOCK_CURRENT_SHOP.id;
+
+    const payload: any = {
+      shop_id: shopId,
+      date: targetDate,
+      investment_amount: datepayData.investment_amount !== undefined ? Number(datepayData.investment_amount) : 0,
+      total_billing_cash: datepayData.total_billing_cash !== undefined ? Number(datepayData.total_billing_cash) : 0,
+      total_billing_gpay: datepayData.total_billing_gpay !== undefined ? Number(datepayData.total_billing_gpay) : 0,
+      total_billing: datepayData.total_billing !== undefined ? Number(datepayData.total_billing) : 0,
+      total_expenses: datepayData.total_expenses !== undefined ? Number(datepayData.total_expenses) : 0,
+      calculated_balance: datepayData.calculated_balance !== undefined ? Number(datepayData.calculated_balance) : 0,
+      actual_closing_cash: datepayData.actual_closing_cash !== undefined ? Number(datepayData.actual_closing_cash) : null,
+      status: datepayData.status || "OPEN",
+      notes: datepayData.notes || "",
+      updated_at: new Date().toISOString(),
+    };
+    if (datepayData.id) {
+      payload.id = datepayData.id;
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from("datepays")
+        .upsert([payload], { onConflict: "id" })
+        .select()
+        .single();
+      if (!error && data) {
+        // Sync local storage as well
+        const current = getStoredOr<Datepay[]>(STORAGE_KEYS.DATEPAYS, MOCK_DATEPAYS);
+        const existingIdx = current.findIndex((d) => d.date === targetDate && d.shop_id === shopId);
+        let updatedList: Datepay[];
+        if (existingIdx >= 0) {
+          updatedList = [...current];
+          updatedList[existingIdx] = data as Datepay;
+        } else {
+          updatedList = [data as Datepay, ...current];
+        }
+        setStored(STORAGE_KEYS.DATEPAYS, updatedList);
+        return data as Datepay;
+      }
+      if (error) {
+        console.warn("Datepay upsert error, trying fallback:", error.message);
+      }
     } catch (e) {
       console.warn("Datepay save fallback", e);
     }
-    const targetDate = datepayData.date || new Date().toISOString().split("T")[0];
-    const current = getStoredOr(STORAGE_KEYS.DATEPAYS, MOCK_DATEPAYS);
-    const existingIndex = current.findIndex((d) => d.date === targetDate);
+
+    const current = getStoredOr<Datepay[]>(STORAGE_KEYS.DATEPAYS, MOCK_DATEPAYS);
+    const existingIndex = current.findIndex((d) => d.date === targetDate && d.shop_id === shopId);
 
     const updatedItem: Datepay = {
-      id: datepayData.id || `dp-${Date.now()}`,
-      shop_id: datepayData.shop_id || MOCK_CURRENT_SHOP.id,
+      id: datepayData.id || (existingIndex >= 0 ? current[existingIndex].id : `dp-${Date.now()}`),
+      shop_id: shopId,
       date: targetDate,
-      investment_amount: datepayData.investment_amount || 0,
-      total_billing_cash: datepayData.total_billing_cash || 0,
-      total_billing_gpay: datepayData.total_billing_gpay || 0,
-      total_billing: datepayData.total_billing || 0,
-      total_expenses: datepayData.total_expenses || 0,
-      calculated_balance: datepayData.calculated_balance || 0,
-      actual_closing_cash: datepayData.actual_closing_cash,
-      status: datepayData.status || "OPEN",
-      notes: datepayData.notes || "",
-      created_at: new Date().toISOString(),
+      investment_amount: payload.investment_amount,
+      total_billing_cash: payload.total_billing_cash,
+      total_billing_gpay: payload.total_billing_gpay,
+      total_billing: payload.total_billing,
+      total_expenses: payload.total_expenses,
+      calculated_balance: payload.calculated_balance,
+      actual_closing_cash: payload.actual_closing_cash,
+      status: payload.status,
+      notes: payload.notes,
+      created_at: existingIndex >= 0 ? current[existingIndex].created_at : new Date().toISOString(),
       updated_at: new Date().toISOString(),
     };
 
     let updatedList: Datepay[];
     if (existingIndex >= 0) {
       updatedList = [...current];
-      updatedList[existingIndex] = { ...updatedList[existingIndex], ...updatedItem };
+      updatedList[existingIndex] = updatedItem;
     } else {
       updatedList = [updatedItem, ...current];
     }
@@ -694,20 +1360,141 @@ export const dataService = {
     return updatedItem;
   },
 
+  // PURCHASES
+  async getPurchases(shopId?: string): Promise<Purchase[]> {
+    try {
+      let query = supabase.from("purchases").select("*, supplier:suppliers(*)");
+      if (shopId) query = query.eq("shop_id", shopId);
+      const { data, error } = await query.order("purchase_date", { ascending: false });
+      if (!error && data && data.length > 0) return data as Purchase[];
+    } catch (e) {
+      console.warn("Purchases fallback", e);
+    }
+    return getStoredOr(STORAGE_KEYS.PURCHASES, MOCK_PURCHASES);
+  },
+
+  async createPurchase(purchaseData: Partial<Purchase>): Promise<Purchase> {
+    const { supplier, items, ...raw } = purchaseData;
+    const targetShopId = raw.shop_id || MOCK_CURRENT_SHOP.id;
+    const vendorName = raw.supplier_name || supplier?.name || (typeof raw.supplier_id === "string" && !raw.supplier_id.includes("-") ? raw.supplier_id : "") || "Local Vendor";
+
+    const summaryNotes = [
+      raw.product_name ? `Item: ${raw.product_name}` : "",
+      raw.total_qty ? `Qty: ${raw.total_qty}` : "",
+      raw.notes || "",
+    ].filter(Boolean).join(" | ");
+
+    const payload: any = {
+      shop_id: targetShopId,
+      invoice_number: raw.invoice_number || `INV-${Date.now().toString().slice(-4)}`,
+      purchase_date: raw.purchase_date || new Date().toISOString().split("T")[0],
+      total_amount: raw.total_amount || 0,
+      paid_amount: raw.paid_amount || raw.total_amount || 0,
+      payment_status: raw.payment_status || "PAID",
+      payment_method: raw.payment_method || "UPI_QR",
+      notes: summaryNotes,
+    };
+
+    if (raw.supplier_id && raw.supplier_id.includes("-")) {
+      payload.supplier_id = raw.supplier_id;
+    }
+
+    try {
+      const { data, error } = await supabase.from("purchases").insert([payload]).select("*, supplier:suppliers(*)").single();
+      if (!error && data) {
+        const fullPurchase: Purchase = {
+          ...data,
+          product_name: raw.product_name,
+          total_qty: raw.total_qty,
+          supplier_name: vendorName,
+          supplier: data.supplier || supplier || ({ name: vendorName } as any),
+        };
+        const current = getStoredOr(STORAGE_KEYS.PURCHASES, MOCK_PURCHASES);
+        setStored(STORAGE_KEYS.PURCHASES, [fullPurchase, ...current]);
+        return fullPurchase;
+      }
+      if (error) {
+        console.error("Supabase createPurchase error:", error.message, error.details);
+      }
+    } catch (e) {
+      console.warn("Purchase insert fallback", e);
+    }
+
+    const current = getStoredOr("chaicraft_purchases", MOCK_PURCHASES);
+    const newPurchase: Purchase = {
+      id: raw.id || `po-${Date.now()}`,
+      shop_id: targetShopId,
+      supplier_id: raw.supplier_id,
+      supplier_name: vendorName,
+      product_name: raw.product_name,
+      total_qty: raw.total_qty,
+      invoice_number: raw.invoice_number || `INV-${Date.now().toString().slice(-4)}`,
+      purchase_date: raw.purchase_date || new Date().toISOString().split("T")[0],
+      total_amount: raw.total_amount || 0,
+      paid_amount: raw.paid_amount || raw.total_amount || 0,
+      payment_status: raw.payment_status || "PAID",
+      payment_method: raw.payment_method || "UPI_QR",
+      notes: summaryNotes,
+      supplier: supplier || ({ name: vendorName } as any),
+      created_at: new Date().toISOString(),
+    };
+    setStored("chaicraft_purchases", [newPurchase, ...current]);
+    return newPurchase;
+  },
+
+  async updatePurchaseStockAdded(purchaseId: string, stockAdded = true): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from("purchases")
+        .update({ stock_added: stockAdded, updated_at: new Date().toISOString() })
+        .eq("id", purchaseId);
+      if (!error) {
+        const current = getStoredOr<Purchase[]>("chaicraft_purchases", MOCK_PURCHASES);
+        const updated = current.map((p) => (p.id === purchaseId ? { ...p, stock_added: stockAdded } : p));
+        setStored("chaicraft_purchases", updated);
+        return true;
+      }
+    } catch (e) {
+      console.warn("updatePurchaseStockAdded fallback", e);
+    }
+    const current = getStoredOr<Purchase[]>("chaicraft_purchases", MOCK_PURCHASES);
+    const updated = current.map((p) => (p.id === purchaseId ? { ...p, stock_added: stockAdded } : p));
+    setStored("chaicraft_purchases", updated);
+    return true;
+  },
+
   async calculateDayMetrics(shopId: string, date: string): Promise<{
     billingCash: number;
     billingGpay: number;
+    billingCard: number;
     billingTotal: number;
     expensesTotal: number;
+    expensesCash: number;
+    expensesOnline: number;
+    purchasesTotal: number;
+    purchasesCash: number;
+    purchasesOnline: number;
+    cashIn: number;
+    cashOut: number;
   }> {
     const orders = await this.getOrders(shopId);
     const expenses = await this.getExpenses(shopId);
+    const purchases = await this.getPurchases(shopId);
+    const activeRegister = await this.getActiveRegister();
 
-    const dayOrders = orders.filter((o) => o.created_at.startsWith(date) && o.status === "COMPLETED");
-    const dayExpenses = expenses.filter((e) => e.expense_date === date);
+    const dayOrders = orders.filter(
+      (o) => (isSameLocalDate(o.created_at, date) || o.created_at?.startsWith(date)) && (o.status === "COMPLETED" || !o.status)
+    );
+    const dayExpenses = expenses.filter(
+      (e) => isSameLocalDate(e.expense_date, date) || isSameLocalDate(e.created_at, date) || e.expense_date === date
+    );
+    const dayPurchases = purchases.filter(
+      (p) => isSameLocalDate(p.purchase_date, date) || isSameLocalDate(p.created_at, date) || p.purchase_date === date
+    );
 
     let billingCash = 0;
     let billingGpay = 0;
+    let billingCard = 0;
     let billingTotal = 0;
 
     dayOrders.forEach((o) => {
@@ -716,6 +1503,8 @@ export const dataService = {
         billingCash += o.total_amount;
       } else if (o.payment_method === "UPI_QR") {
         billingGpay += o.total_amount;
+      } else if (o.payment_method === "CARD") {
+        billingCard += o.total_amount;
       } else if (o.payment_method === "SPLIT") {
         billingCash += o.cash_amount || 0;
         billingGpay += o.gpay_amount || 0;
@@ -724,54 +1513,131 @@ export const dataService = {
       }
     });
 
-    const expensesTotal = dayExpenses.reduce((sum, e) => sum + e.amount, 0);
+    let expensesCash = 0;
+    let expensesOnline = 0;
+    dayExpenses.forEach((e) => {
+      // If the expense is COMPLETED / settled, the actual net expenditure is e.bill_amount.
+      // If the expense is PENDING (unsettled), the temporary cash taken is e.amount.
+      const effectiveExpenseAmt =
+        e.status === "COMPLETED" && e.bill_amount !== undefined && e.bill_amount > 0
+          ? Number(e.bill_amount)
+          : Number(e.amount || 0);
+
+      if (e.payment_method === "CASH") {
+        expensesCash += effectiveExpenseAmt;
+      } else {
+        expensesOnline += effectiveExpenseAmt;
+      }
+    });
+    const expensesTotal = expensesCash + expensesOnline;
+
+    let purchasesCash = 0;
+    let purchasesOnline = 0;
+    dayPurchases.forEach((p) => {
+      const amt = p.paid_amount || p.total_amount || 0;
+      if (p.payment_method === "CASH") {
+        purchasesCash += amt;
+      } else {
+        purchasesOnline += amt;
+      }
+    });
+    const purchasesTotal = purchasesCash + purchasesOnline;
 
     return {
       billingCash,
       billingGpay,
+      billingCard,
       billingTotal,
       expensesTotal,
+      expensesCash,
+      expensesOnline,
+      purchasesTotal,
+      purchasesCash,
+      purchasesOnline,
+      cashIn: activeRegister?.cash_in || 0,
+      cashOut: activeRegister?.cash_out || 0,
     };
   },
 
   // SALARIES & ATTENDANCE
   async getSalaries(shopId?: string): Promise<Salary[]> {
     try {
-      let query = supabase.from("salaries").select("*, employee:profiles(*)");
+      let query = supabase.from("salaries").select("*").order("created_at", { ascending: false });
       if (shopId) query = query.eq("shop_id", shopId);
       const { data, error } = await query;
-      if (!error && data && data.length > 0) return data as Salary[];
+      if (!error && data && data.length > 0) {
+        return data as Salary[];
+      }
+      if (error) {
+        console.warn("Supabase getSalaries notice:", error.message);
+      }
     } catch (e) {
-      console.warn("Salaries fallback", e);
+      console.warn("Salaries query fallback", e);
     }
     return getStoredOr(STORAGE_KEYS.SALARIES, MOCK_SALARIES);
   },
 
   async recordSalaryPayment(salaryData: Partial<Salary>): Promise<Salary> {
+    const targetShopId = salaryData.shop_id || MOCK_CURRENT_SHOP.id;
+    const payload: any = {
+      shop_id: targetShopId,
+      employee_id: salaryData.employee_id,
+      month: salaryData.month || new Date().getMonth() + 1,
+      year: salaryData.year || new Date().getFullYear(),
+      base_salary: Number(salaryData.base_salary) || 0,
+      allowances: Number(salaryData.allowances) || 0,
+      bonus: Number(salaryData.bonus) || 0,
+      advances_deducted: Number(salaryData.advances_deducted) || 0,
+      other_deductions: Number(salaryData.other_deductions) || 0,
+      net_payable: Number(salaryData.net_payable) || 0,
+      paid_amount: Number(salaryData.paid_amount) || Number(salaryData.net_payable) || 0,
+      payment_status: salaryData.payment_status || "PAID",
+      payment_method: salaryData.payment_method || "UPI_QR",
+      payment_date: salaryData.payment_date || new Date().toISOString().split("T")[0],
+      notes: salaryData.notes || "",
+      updated_at: new Date().toISOString(),
+    };
+
+    if (salaryData.id && salaryData.id.includes("-")) {
+      payload.id = salaryData.id;
+    }
+
     try {
-      const { data, error } = await supabase.from("salaries").upsert([salaryData]).select().single();
-      if (!error && data) return data as Salary;
+      const { data, error } = await supabase
+        .from("salaries")
+        .upsert([payload], { onConflict: "shop_id, employee_id, month, year" })
+        .select()
+        .single();
+      if (!error && data) {
+        const fullSal = { ...data, employee: salaryData.employee } as Salary;
+        const current = getStoredOr(STORAGE_KEYS.SALARIES, MOCK_SALARIES);
+        setStored(STORAGE_KEYS.SALARIES, [fullSal, ...current.filter((s) => s.id !== fullSal.id)]);
+        return fullSal;
+      }
+      if (error) {
+        console.error("Supabase recordSalaryPayment error:", error.message, error.details);
+      }
     } catch (e) {
-      console.warn("Salary record fallback", e);
+      console.warn("Salary record database fallback", e);
     }
     const current = getStoredOr(STORAGE_KEYS.SALARIES, MOCK_SALARIES);
     const newSalary: Salary = {
       id: salaryData.id || `sal-${Date.now()}`,
-      shop_id: salaryData.shop_id || MOCK_CURRENT_SHOP.id,
+      shop_id: targetShopId,
       employee_id: salaryData.employee_id || "emp-1",
-      month: salaryData.month || new Date().getMonth() + 1,
-      year: salaryData.year || new Date().getFullYear(),
-      base_salary: salaryData.base_salary || 0,
-      allowances: salaryData.allowances || 0,
-      bonus: salaryData.bonus || 0,
-      advances_deducted: salaryData.advances_deducted || 0,
-      other_deductions: salaryData.other_deductions || 0,
-      net_payable: salaryData.net_payable || 0,
-      paid_amount: salaryData.paid_amount || 0,
-      payment_status: salaryData.payment_status || "PAID",
-      payment_method: salaryData.payment_method || "UPI_QR",
-      payment_date: salaryData.payment_date || new Date().toISOString().split("T")[0],
-      notes: salaryData.notes,
+      month: payload.month,
+      year: payload.year,
+      base_salary: payload.base_salary,
+      allowances: payload.allowances,
+      bonus: payload.bonus,
+      advances_deducted: payload.advances_deducted,
+      other_deductions: payload.other_deductions,
+      net_payable: payload.net_payable,
+      paid_amount: payload.paid_amount,
+      payment_status: payload.payment_status,
+      payment_method: payload.payment_method,
+      payment_date: payload.payment_date,
+      notes: payload.notes,
       employee: salaryData.employee,
     };
     const updated = [newSalary, ...current.filter((s) => s.id !== newSalary.id)];

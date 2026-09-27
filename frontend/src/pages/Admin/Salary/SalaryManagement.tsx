@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Modal } from "@/components/ui/Modal";
 import { dataService } from "@/services/supabaseService";
+import { useAuthStore } from "@/stores/authStore";
 import { Salary, Profile, PaymentMethod } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
 import {
@@ -24,6 +25,9 @@ import {
 } from "lucide-react";
 
 export const SalaryManagement: React.FC = () => {
+  const { shop, user } = useAuthStore();
+  const currentShopId = shop?.id || user?.shop_id;
+
   const [activeTab, setActiveTab] = useState<"SALARY_PAGE" | "SALARY_REPORT">("SALARY_PAGE");
 
   const [salaries, setSalaries] = useState<Salary[]>([]);
@@ -43,16 +47,16 @@ export const SalaryManagement: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState(false);
 
   useEffect(() => {
-    dataService.getSalaries().then(setSalaries);
-    dataService.getEmployees().then((res) => {
-      const staffOnly = res.filter((e) => e.role === "EMPLOYEE");
+    dataService.getSalaries(currentShopId).then(setSalaries);
+    dataService.getEmployees(currentShopId).then((res) => {
+      const staffOnly = res.filter((e) => e.role === "EMPLOYEE" && (!currentShopId || e.shop_id === currentShopId));
       setEmployees(staffOnly);
       if (staffOnly[0]) {
         setSelectedEmployeeId(staffOnly[0].id);
         setBaseSalary((staffOnly[0].monthly_salary || 22000).toString());
       }
     });
-  }, []);
+  }, [currentShopId]);
 
   const handleSelectEmployee = (id: string) => {
     setSelectedEmployeeId(id);
@@ -73,9 +77,11 @@ export const SalaryManagement: React.FC = () => {
     if (!selectedEmployeeId) return;
     setIsProcessing(true);
 
+    const targetShopId = currentShopId || shop?.id || "a1111111-1111-1111-1111-111111111111";
     const empObj = employees.find((e) => e.id === selectedEmployeeId);
 
     const newSal = await dataService.recordSalaryPayment({
+      shop_id: targetShopId,
       employee_id: selectedEmployeeId,
       month,
       year,
@@ -93,9 +99,11 @@ export const SalaryManagement: React.FC = () => {
       employee: empObj,
     });
 
-    setSalaries([newSal, ...salaries.filter((s) => s.id !== newSal.id)]);
+    const refreshed = await dataService.getSalaries(targetShopId);
+    setSalaries(refreshed);
     setIsProcessing(false);
     setDisburseModalOpen(false);
+    alert("✅ Salary disbursement record saved to database successfully!");
   };
 
   const totalDisbursedThisMonth = salaries

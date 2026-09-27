@@ -41,3 +41,27 @@ export function generateOrderNumber(): string {
   const rand = Math.floor(1000 + Math.random() * 9000);
   return `CC-${rand}`;
 }
+
+/**
+ * Returns YYYY-MM-DD in user's local system timezone (not UTC).
+ */
+export function getLocalDateStr(dateInput: Date | string | number = new Date()): string {
+  if (!dateInput) return "";
+  const d = typeof dateInput === "string" || typeof dateInput === "number" ? new Date(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * Compares two date inputs in user's local system timezone.
+ */
+export function isSameLocalDate(
+  dateInput: Date | string | undefined | null,
+  targetDateStr: string
+): boolean {
+  if (!dateInput || !targetDateStr) return false;
+  return getLocalDateStr(dateInput) === targetDateStr;
+}

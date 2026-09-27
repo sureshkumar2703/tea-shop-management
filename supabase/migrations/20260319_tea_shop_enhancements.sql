@@ -37,12 +37,24 @@ ADD COLUMN IF NOT EXISTS price_mode VARCHAR(20) DEFAULT 'STANDARD', -- 'STANDARD
 ADD COLUMN IF NOT EXISTS regular_price NUMERIC(10, 2) DEFAULT 0.00,
 ADD COLUMN IF NOT EXISTS thirsty_price NUMERIC(10, 2) DEFAULT 0.00;
 
--- 4. ENHANCE PROFILES TABLE
-ALTER TABLE public.profiles
-ADD COLUMN IF NOT EXISTS address TEXT,
-ADD COLUMN IF NOT EXISTS country VARCHAR(100) DEFAULT 'India',
-ADD COLUMN IF NOT EXISTS state VARCHAR(100) DEFAULT 'Karnataka',
-ADD COLUMN IF NOT EXISTS district VARCHAR(100);
+-- 4. ENHANCE USERS / PROFILES TABLE
+DO $$
+BEGIN
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'users') THEN
+        ALTER TABLE public.users
+        ADD COLUMN IF NOT EXISTS address TEXT,
+        ADD COLUMN IF NOT EXISTS country VARCHAR(100) DEFAULT 'India',
+        ADD COLUMN IF NOT EXISTS state VARCHAR(100) DEFAULT 'Karnataka',
+        ADD COLUMN IF NOT EXISTS district VARCHAR(100);
+    END IF;
+    IF EXISTS (SELECT FROM pg_tables WHERE schemaname = 'public' AND tablename = 'profiles') THEN
+        ALTER TABLE public.profiles
+        ADD COLUMN IF NOT EXISTS address TEXT,
+        ADD COLUMN IF NOT EXISTS country VARCHAR(100) DEFAULT 'India',
+        ADD COLUMN IF NOT EXISTS state VARCHAR(100) DEFAULT 'Karnataka',
+        ADD COLUMN IF NOT EXISTS district VARCHAR(100);
+    END IF;
+END $$;
 
 -- 5. ENHANCE ORDERS & ORDER ITEMS
 ALTER TABLE public.orders
@@ -70,7 +82,7 @@ CREATE TABLE IF NOT EXISTS public.datepays (
     actual_closing_cash NUMERIC(10, 2),
     status VARCHAR(20) DEFAULT 'OPEN', -- 'OPEN', 'SETTLED', 'CLOSED'
     notes TEXT,
-    recorded_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    recorded_by UUID,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     UNIQUE(shop_id, date)
@@ -79,13 +91,13 @@ CREATE TABLE IF NOT EXISTS public.datepays (
 -- Enable RLS for datepays
 ALTER TABLE public.datepays ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Shop staff view datepays"
-ON public.datepays FOR SELECT TO authenticated
-USING (shop_id = public.get_auth_user_shop_id() OR public.get_auth_user_role() = 'ADMIN');
+DROP POLICY IF EXISTS "Shop staff view datepays" ON public.datepays;
+DROP POLICY IF EXISTS "Admin manage datepays" ON public.datepays;
+DROP POLICY IF EXISTS "Enable select for datepays" ON public.datepays;
+DROP POLICY IF EXISTS "Enable all for datepays" ON public.datepays;
 
-CREATE POLICY "Admin manage datepays"
-ON public.datepays FOR ALL TO authenticated
-USING (
-    (shop_id = public.get_auth_user_shop_id() AND public.get_auth_user_role() IN ('OWNER', 'ADMIN'))
-    OR public.get_auth_user_role() = 'ADMIN'
-);
+CREATE POLICY "Enable all for datepays"
+ON public.datepays FOR ALL
+TO authenticated, anon
+USING (true)
+WITH CHECK (true);

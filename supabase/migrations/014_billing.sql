@@ -15,13 +15,26 @@ CREATE TABLE IF NOT EXISTS public.orders (
     discount_amount NUMERIC(10, 2) DEFAULT 0.00,
     discount_reason VARCHAR(255),
     total_amount NUMERIC(10, 2) NOT NULL DEFAULT 0.00,
-    payment_method payment_method NOT NULL DEFAULT 'CASH',
+    received_amount NUMERIC(10, 2) DEFAULT 0.00, -- Amount tendered by customer
+    balance_amount NUMERIC(10, 2) DEFAULT 0.00, -- Change returned to customer
+    payment_method VARCHAR(50) NOT NULL DEFAULT 'CASH',
+    cash_amount NUMERIC(10, 2) DEFAULT 0.00,
+    gpay_amount NUMERIC(10, 2) DEFAULT 0.00,
+    is_split_payment BOOLEAN DEFAULT false,
     payment_status VARCHAR(50) DEFAULT 'PAID', -- 'PAID', 'REFUNDED', 'PENDING'
-    status order_status NOT NULL DEFAULT 'COMPLETED',
+    status VARCHAR(50) NOT NULL DEFAULT 'COMPLETED',
     notes TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
+
+-- Upgrade existing orders table schema in Supabase:
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS cashier_name VARCHAR(255);
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS received_amount NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS balance_amount NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS cash_amount NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS gpay_amount NUMERIC(10, 2) DEFAULT 0.00;
+ALTER TABLE public.orders ADD COLUMN IF NOT EXISTS is_split_payment BOOLEAN DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS public.order_items (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
