@@ -26,3 +26,17 @@ export const supabase = createClient(
     },
   }
 );
+
+// Secondary client used for creating auth users (signup) without overwriting the current active session
+export const authRegistrationClient = createClient(
+  supabaseUrl,
+  supabaseAnonKey,
+  {
+    auth: {
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
+    },
+  }
+);
+

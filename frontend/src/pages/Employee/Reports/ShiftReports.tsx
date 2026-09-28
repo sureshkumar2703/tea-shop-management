@@ -45,28 +45,42 @@ export const ShiftReports: React.FC = () => {
   }, []);
 
   // Filter based on period
-  const filterByPeriod = (dateStr: string): boolean => {
-    const itemDate = new Date(dateStr);
+  const filterByPeriod = (dateStr?: string): boolean => {
+    if (!dateStr) return false;
     const now = new Date();
+    const itemDate = new Date(dateStr);
+    const itemDateStr = dateStr.includes("T") ? dateStr.split("T")[0] : dateStr.slice(0, 10);
 
     if (period === "DAY") {
+      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
       return (
-        itemDate.getFullYear() === now.getFullYear() &&
-        itemDate.getMonth() === now.getMonth() &&
-        itemDate.getDate() === now.getDate()
+        itemDateStr === todayStr ||
+        (itemDate.getFullYear() === now.getFullYear() &&
+          itemDate.getMonth() === now.getMonth() &&
+          itemDate.getDate() === now.getDate())
       );
     }
 
     if (period === "WEEK") {
-      const diffTime = Math.abs(now.getTime() - itemDate.getTime());
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays <= 7;
+      const d = new Date(now);
+      const day = d.getDay();
+      const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diff));
+      const mondayStr = `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, "0")}-${String(monday.getDate()).padStart(2, "0")}`;
+      
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const sundayStr = `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, "0")}-${String(sunday.getDate()).padStart(2, "0")}`;
+
+      return itemDateStr >= mondayStr && itemDateStr <= sundayStr;
     }
 
     if (period === "MONTH") {
+      const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       return (
-        itemDate.getFullYear() === now.getFullYear() &&
-        itemDate.getMonth() === now.getMonth()
+        itemDateStr.startsWith(monthPrefix) ||
+        (itemDate.getFullYear() === now.getFullYear() &&
+          itemDate.getMonth() === now.getMonth())
       );
     }
 

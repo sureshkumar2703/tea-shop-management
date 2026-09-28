@@ -9,6 +9,7 @@ import { dataService } from "@/services/supabaseService";
 import { useAuthStore } from "@/stores/authStore";
 import { Profile } from "@/types";
 import { formatDate } from "@/lib/utils";
+import { getPdfWatermarkCss, getPdfWatermarkHtml, getPdfHeaderHtml } from "@/lib/pdfUtils";
 import {
   Plus,
   ShieldCheck,
@@ -318,11 +319,10 @@ export const AdminList: React.FC = () => {
       <head>
         <title>Owners & Co-Admins - ${shopName}</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 24px; color: #1e293b; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 18px; }
-          .shop-title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; }
-          .shop-meta { font-size: 12px; color: #64748b; margin-top: 4px; }
-          .report-badge { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px; display: inline-block; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 24px; color: #1e293b; position: relative; }
+          .shop-title { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0; }
+          .shop-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+          .report-badge { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px; display: inline-block; }
           .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
           .stat-box { background: #f8fafc; padding: 12px; border-radius: 8px; border: 1px solid #e2e8f0; text-align: center; }
           .stat-label { font-size: 11px; text-transform: uppercase; color: #64748b; font-weight: 700; }
@@ -337,20 +337,13 @@ export const AdminList: React.FC = () => {
           .badge.active { background: #dcfce7; color: #166534; }
           .badge.inactive { background: #fee2e2; color: #991b1b; }
           .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+          ${getPdfWatermarkCss()}
           @media print { body { padding: 0; } @page { size: landscape; margin: 12mm; } }
         </style>
       </head>
       <body>
-        <div class="header">
-          <div>
-            <h1 class="shop-title">${shopName}</h1>
-            <div class="shop-meta">${shopAddress}</div>
-          </div>
-          <div style="text-align: right;">
-            <div class="report-badge">SHOP OWNERS & CO-ADMINS DIRECTORY</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 4px;">Generated: ${new Date().toLocaleString()}</div>
-          </div>
-        </div>
+        ${getPdfWatermarkHtml(shopName, shop?.logo_url)}
+        ${getPdfHeaderHtml(shopName, shopAddress, "SHOP OWNERS & CO-ADMINS DIRECTORY", shop?.logo_url)}
 
         <div class="stats-grid">
           <div class="stat-box">
@@ -437,7 +430,7 @@ export const AdminList: React.FC = () => {
               icon={<Plus className="w-4 h-4" />}
               onClick={() => navigate("/admin/admins/new")}
             >
-              Add Co-Admin
+              Add Co-Owner
             </Button>
           </div>
         </div>

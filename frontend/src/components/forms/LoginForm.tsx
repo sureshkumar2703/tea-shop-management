@@ -41,7 +41,13 @@ export const LoginForm: React.FC = () => {
     } else {
       // Read the fresh role from store after login
       const state = useAuthStore.getState();
-      if (state.role) {
+      const isOnboarded =
+        localStorage.getItem("chaicraft_onboarded") === "true" ||
+        (state.user?.id ? localStorage.getItem(`chaicraft_onboarded_${state.user.id}`) === "true" : false);
+
+      if (!isOnboarded) {
+        navigate("/onboarding", { replace: true });
+      } else if (state.role) {
         navigate(getDefaultDashboard(state.role), { replace: true });
       }
     }

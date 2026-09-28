@@ -22,6 +22,10 @@ import SuperAdminCreateAdmin from "@/pages/SuperAdmin/Admins/CreateAdmin";
 import SuperAdminSuperAdminList from "@/pages/SuperAdmin/SuperAdmins/SuperAdminList";
 import CreateSuperAdminPage from "@/pages/SuperAdmin/SuperAdmins/CreateSuperAdmin";
 import SuperAdminReports from "@/pages/SuperAdmin/Reports";
+import ShopBillReport from "@/pages/SuperAdmin/Reports/ShopBillReport";
+import ShopExpenseReport from "@/pages/SuperAdmin/Reports/ShopExpenseReport";
+import ShopEmployeeReport from "@/pages/SuperAdmin/Reports/ShopEmployeeReport";
+import ShopProductList from "@/pages/SuperAdmin/Products/ShopProductList";
 import SuperAdminSettings from "@/pages/SuperAdmin/Settings";
 
 // Admin Pages
@@ -58,7 +62,9 @@ import EmployeePOS from "@/pages/Employee/Billing/EmployeePOS";
 import ShiftCash from "@/pages/Employee/Cash/ShiftCash";
 import ShiftReports from "@/pages/Employee/Reports/ShiftReports";
 import EmployeeSalaryReport from "@/pages/Employee/Salary/EmployeeSalaryReport";
+import EmployeeExpenses from "@/pages/Employee/Expenses/EmployeeExpenses";
 import Profile from "@/pages/Employee/Profile";
+import OnboardingScreen from "@/pages/Onboarding/OnboardingScreen";
 
 export const AppRoutes: React.FC = () => {
   const { role, user } = useAuthStore();
@@ -67,9 +73,21 @@ export const AppRoutes: React.FC = () => {
 
   useEffect(() => {
     if (user && role && location.pathname === "/login") {
-      navigate(getDefaultDashboard(role), { replace: true });
+      const isOnboarded =
+        localStorage.getItem("chaicraft_onboarded") === "true" ||
+        (user?.id ? localStorage.getItem(`chaicraft_onboarded_${user.id}`) === "true" : false);
+
+      if (!isOnboarded) {
+        navigate("/onboarding", { replace: true });
+      } else {
+        navigate(getDefaultDashboard(role), { replace: true });
+      }
     }
   }, [location.pathname, navigate, role, user]);
+
+  const isOnboarded =
+    localStorage.getItem("chaicraft_onboarded") === "true" ||
+    (user?.id ? localStorage.getItem(`chaicraft_onboarded_${user.id}`) === "true" : false);
 
   return (
     <Routes>
@@ -78,7 +96,11 @@ export const AppRoutes: React.FC = () => {
         path="/login"
         element={
           user && role ? (
-            <Navigate to={getDefaultDashboard(role)} replace />
+            isOnboarded ? (
+              <Navigate to={getDefaultDashboard(role)} replace />
+            ) : (
+              <Navigate to="/onboarding" replace />
+            )
           ) : (
             <Login />
           )
@@ -90,6 +112,9 @@ export const AppRoutes: React.FC = () => {
 
       {/* Protected Routes */}
       <Route element={<ProtectedRoute />}>
+        {/* Onboarding Screen for Any Authenticated User */}
+        <Route path="/onboarding" element={<OnboardingScreen />} />
+
         {/* Super Admin Tier */}
         <Route element={<RoleRoute allowedRoles={["ADMIN"]} />}>
           <Route path="/super-admin/dashboard" element={<SuperAdminDashboard />} />
@@ -97,11 +122,15 @@ export const AppRoutes: React.FC = () => {
           <Route path="/super-admin/shops/new" element={<CreateShop />} />
           <Route path="/super-admin/shops/:id" element={<ShopDetails />} />
           <Route path="/super-admin/shops/:id/renew" element={<RenewShop />} />
+          <Route path="/super-admin/products" element={<ShopProductList />} />
           <Route path="/super-admin/admins" element={<SuperAdminAdminList />} />
           <Route path="/super-admin/admins/new" element={<SuperAdminCreateAdmin />} />
           <Route path="/super-admin/super-admins" element={<SuperAdminSuperAdminList />} />
           <Route path="/super-admin/super-admins/new" element={<CreateSuperAdminPage />} />
           <Route path="/super-admin/reports" element={<SuperAdminReports />} />
+          <Route path="/super-admin/reports/bills" element={<ShopBillReport />} />
+          <Route path="/super-admin/reports/expenses" element={<ShopExpenseReport />} />
+          <Route path="/super-admin/reports/employees" element={<ShopEmployeeReport />} />
           <Route path="/super-admin/settings" element={<SuperAdminSettings />} />
         </Route>
 
@@ -139,6 +168,7 @@ export const AppRoutes: React.FC = () => {
         <Route element={<RoleRoute allowedRoles={["EMPLOYEE", "OWNER", "ADMIN"]} />}>
           <Route path="/employee/dashboard" element={<EmployeeDashboard />} />
           <Route path="/employee/billing" element={<EmployeePOS />} />
+          <Route path="/employee/expenses" element={<EmployeeExpenses />} />
           <Route path="/employee/cash" element={<Navigate to="/employee/dashboard" replace />} />
           <Route path="/employee/reports" element={<ShiftReports />} />
           <Route path="/employee/salary" element={<EmployeeSalaryReport />} />

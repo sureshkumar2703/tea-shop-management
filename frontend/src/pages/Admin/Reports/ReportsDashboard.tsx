@@ -11,6 +11,7 @@ import { useAuthStore } from "@/stores/authStore";
 import { useCartStore } from "@/stores/cartStore";
 import { Order, Expense, Datepay } from "@/types";
 import { formatCurrency, formatDate, formatDateTime, getLocalDateStr, isSameLocalDate } from "@/lib/utils";
+import { getPdfWatermarkCss, getPdfWatermarkHtml, getPdfHeaderHtml } from "@/lib/pdfUtils";
 import {
   BarChart3,
   TrendingUp,
@@ -88,14 +89,25 @@ export const ReportsDashboard: React.FC = () => {
       );
       label = `Day Report: ${formatDate(selectedDay)}`;
     } else if (activePeriod === "WEEK") {
-      const oneWeekAgo = new Date(Date.now() - 7 * 86400000);
-      filteredOrders = orders.filter(
-        (o) => new Date(o.created_at) >= oneWeekAgo && (o.status === "COMPLETED" || !o.status)
-      );
-      filteredExpenses = expenses.filter(
-        (e) => new Date(e.expense_date || e.created_at || "") >= oneWeekAgo
-      );
-      label = "Current Week Report (Last 7 Days)";
+      const d = new Date(now);
+      const day = d.getDay();
+      const diffToMonday = d.getDate() - day + (day === 0 ? -6 : 1);
+      const monday = new Date(d.setDate(diffToMonday));
+      const mondayStr = getLocalDateStr(monday);
+
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const sundayStr = getLocalDateStr(sunday);
+
+      filteredOrders = orders.filter((o) => {
+        const loc = getLocalDateStr(o.created_at);
+        return loc >= mondayStr && loc <= sundayStr && (o.status === "COMPLETED" || !o.status);
+      });
+      filteredExpenses = expenses.filter((e) => {
+        const loc = getLocalDateStr(e.expense_date || e.created_at);
+        return loc >= mondayStr && loc <= sundayStr;
+      });
+      label = `Current Week Report (${formatDate(mondayStr)} - ${formatDate(sundayStr)})`;
     } else if (activePeriod === "MONTH") {
       const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       filteredOrders = orders.filter((o) => {
@@ -334,15 +346,17 @@ export const ReportsDashboard: React.FC = () => {
       })
       .join("");
 
+    const shopName = shop?.name || "Tea Shop";
+    const shopAddress = `${shop?.address || "Store Branch"} | Phone: ${shop?.phone || "N/A"} ${shop?.gst_number ? `| GSTIN: ${shop.gst_number}` : ""}`;
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Detailed Bills Log Report - ${shop?.name || "Chai Craft"}</title>
+        <title>Detailed Bills Log Report - ${shopName}</title>
         <style>
-          body { font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; color: #0f172a; margin: 0; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e2e8f0; padding-bottom: 16px; margin-bottom: 20px; }
-          .shop-title { font-size: 22px; font-weight: 800; color: #b45309; }
+          body { font-family: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; padding: 24px; color: #0f172a; margin: 0; position: relative; }
+          .shop-title { font-size: 20px; font-weight: 800; color: #b45309; }
           .report-badge { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 6px; font-size: 12px; font-weight: bold; }
           .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
           .summary-card { background: #f8fafc; border: 1px solid #e2e8f0; padding: 12px 14px; border-radius: 8px; }
@@ -351,6 +365,7 @@ export const ReportsDashboard: React.FC = () => {
           table { width: 100%; border-collapse: collapse; font-size: 12px; }
           th { background: #f1f5f9; padding: 9px 10px; text-align: left; font-size: 11px; text-transform: uppercase; color: #475569; border-bottom: 2px solid #cbd5e1; }
           .footer { margin-top: 24px; font-size: 11px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 12px; }
+          ${getPdfWatermarkCss()}
           @media print {
             body { padding: 0; }
             @page { margin: 12mm; size: landscape; }
@@ -358,19 +373,8 @@ export const ReportsDashboard: React.FC = () => {
         </style>
       </head>
       <body>
-        <div class="header">
-          <div>
-            <div class="shop-title">☕ ${shop?.name || "Chai Craft Artisan Bar"}</div>
-            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">
-              ${shop?.address || "Store Branch"} | Phone: ${shop?.phone || "N/A"} ${shop?.gst_number ? `| GSTIN: ${shop.gst_number}` : ""}
-            </div>
-          </div>
-          <div style="text-align: right;">
-            <div class="report-badge">📋 DETAILED BILLS AUDIT</div>
-            <div style="font-size: 13px; font-weight: bold; margin-top: 4px; color: #334155;">${report.label}</div>
-            <div style="font-size: 11px; color: #94a3b8; margin-top: 2px;">Generated on: ${new Date().toLocaleString()}</div>
-          </div>
-        </div>
+        ${getPdfWatermarkHtml(shopName, shop?.logo_url)}
+        ${getPdfHeaderHtml(shopName, shopAddress, `DETAILED BILLS AUDIT (${report.label})`, shop?.logo_url)}
 
         <div class="summary-grid">
           <div class="summary-card">

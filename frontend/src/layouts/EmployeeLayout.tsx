@@ -14,6 +14,7 @@ import {
   Menu,
   X,
   Clock,
+  DollarSign,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -30,6 +31,7 @@ export const EmployeeLayout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { label: "Dashboard", path: "/employee/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
     { label: "POS Terminal", path: "/employee/billing", icon: <Receipt className="w-5 h-5" /> },
+    { label: "Daily Expenses", path: "/employee/expenses", icon: <DollarSign className="w-5 h-5" /> },
     { label: "Bills & Expenses", path: "/employee/reports", icon: <BarChart2 className="w-5 h-5" /> },
     { label: "My Salary Report", path: "/employee/salary", icon: <FileText className="w-5 h-5" /> },
     { label: "My Profile", path: "/employee/profile", icon: <User className="w-5 h-5" /> },

@@ -6,22 +6,57 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { DataTable } from "@/components/tables/DataTable";
 import { dataService } from "@/services/supabaseService";
-import { Shop } from "@/types";
-import { formatCurrency, formatDate } from "@/lib/utils";
-import { Store, Users, CreditCard, AlertTriangle, Plus, ArrowRight, ShieldCheck, Database } from "lucide-react";
+import { Shop, Profile, Order } from "@/types";
+import { formatCurrency, formatDate, getLocalDateStr } from "@/lib/utils";
+import { Store, Users, CreditCard, AlertTriangle, Plus, ArrowRight, ShieldCheck, Database, TrendingUp } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 
 export const SuperAdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [shops, setShops] = useState<Shop[]>([]);
+  const [employees, setEmployees] = useState<Profile[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    dataService.getShops().then(setShops);
+    Promise.all([
+      dataService.getShops(),
+      dataService.getEmployees(),
+      dataService.getOrders(),
+    ]).then(([sData, eData, oData]) => {
+      setShops(sData || []);
+      setEmployees(eData || []);
+      setOrders(oData || []);
+      setLoading(false);
+    });
   }, []);
 
   const totalShops = shops.length;
   const activeShops = shops.filter((s) => s.subscription_status === "ACTIVE").length;
   const trialShops = shops.filter((s) => s.subscription_status === "TRIAL").length;
+
+  // Dynamic active staff across all franchises
+  const activeStaffCount = employees.length;
+
+  // Dynamic Platform MRR / Current Month Franchise Billing
+  const now = new Date();
+  const currentMonthStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const totalCompletedOrders = orders.filter((o) => o.status === "COMPLETED" || !o.status);
+  
+  const currentMonthSales = totalCompletedOrders
+    .filter((o) => getLocalDateStr(o.created_at).startsWith(currentMonthStr) || o.created_at?.startsWith(currentMonthStr))
+    .reduce((sum, o) => sum + (o.total_amount || 0), 0);
+
+  const totalPlatformVolume = totalCompletedOrders.reduce((sum, o) => sum + (o.total_amount || 0), 0);
+  const platformMRR = currentMonthSales > 0 ? currentMonthSales : totalPlatformVolume;
+
+  // Renewals due in next 30 days
+  const renewalsDue = shops.filter((s) => {
+    if (s.is_lifetime || !s.subscription_end_date) return false;
+    const expiryTime = new Date(s.subscription_end_date).getTime();
+    const diffDays = (expiryTime - Date.now()) / (1000 * 60 * 60 * 24);
+    return diffDays >= 0 && diffDays <= 30;
+  }).length;
 
   const columns = [
     {
@@ -130,31 +165,28 @@ export const SuperAdminDashboard: React.FC = () => {
             title="Total Tea Shops"
             value={totalShops}
             icon={<Store className="w-5 h-5" />}
-            trend={{ value: "+2 this month", isPositive: true }}
             subtitle={`${activeShops} active, ${trialShops} on trial`}
             color="amber"
           />
           <StatCard
-            title="Platform MRR"
-            value={formatCurrency(74500)}
+            title="Platform MRR / Sales"
+            value={formatCurrency(platformMRR)}
             icon={<CreditCard className="w-5 h-5" />}
-            trend={{ value: "+18.4%", isPositive: true }}
-            subtitle="SaaS franchise subscriptions"
+            subtitle={`Month ${now.getMonth() + 1}/${now.getFullYear()} franchise volume`}
             color="emerald"
           />
           <StatCard
             title="Active Staff Accounts"
-            value="38"
+            value={activeStaffCount}
             icon={<Users className="w-5 h-5" />}
-            trend={{ value: "+6", isPositive: true }}
-            subtitle="Across all franchise locations"
+            subtitle="Registered staff across all shops"
             color="blue"
           />
           <StatCard
             title="Renewals Due"
-            value={trialShops}
+            value={renewalsDue}
             icon={<AlertTriangle className="w-5 h-5" />}
-            subtitle="Expiring in the next 14 days"
+            subtitle="Expiring in the next 30 days"
             color="purple"
           />
         </div>

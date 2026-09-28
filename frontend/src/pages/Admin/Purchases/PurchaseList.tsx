@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Purchase, Product } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
+import { getPdfWatermarkCss, getPdfWatermarkHtml, getPdfHeaderHtml } from "@/lib/pdfUtils";
 import {
   Plus,
   Truck,
@@ -306,20 +307,23 @@ export const PurchaseList: React.FC = () => {
       })
       .join("");
 
+    const shopName = shop?.name || "Tea Shop";
+    const shopAddress = shop?.address || "";
+
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Purchases Report - ${tabName}</title>
+        <title>Purchases Report - ${tabName} - ${shopName}</title>
         <style>
-          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 25px; color: #1e293b; }
-          .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #f59e0b; padding-bottom: 15px; margin-bottom: 20px; }
+          body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; padding: 25px; color: #1e293b; position: relative; }
           .title { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0; }
           .subtitle { font-size: 12px; color: #64748b; margin-top: 4px; }
           table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 15px; }
           th { background-color: #f1f5f9; padding: 10px; text-align: left; font-weight: 700; color: #475569; border-bottom: 2px solid #cbd5e1; }
           .footer-summary { margin-top: 25px; display: flex; justify-content: flex-end; }
           .summary-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; min-width: 260px; }
+          ${getPdfWatermarkCss()}
           @media print {
             body { padding: 0; }
             button { display: none; }
@@ -327,16 +331,8 @@ export const PurchaseList: React.FC = () => {
         </style>
       </head>
       <body>
-        <div class="header">
-          <div>
-            <h1 class="title">${shop?.name || "Chai Craft Tea Shop"}</h1>
-            <p class="subtitle">Inventory Inward Purchases Report &bull; ${tabName}</p>
-          </div>
-          <div style="text-align: right;">
-            <p style="font-size: 11px; color: #64748b; margin: 0;">Date: <strong>${new Date().toLocaleDateString()}</strong></p>
-            <p style="font-size: 11px; color: #64748b; margin: 2px 0 0 0;">Total Records: <strong>${filteredPurchases.length}</strong></p>
-          </div>
-        </div>
+        ${getPdfWatermarkHtml(shopName, shop?.logo_url)}
+        ${getPdfHeaderHtml(shopName, shopAddress, `PURCHASES INWARD (${tabName})`, shop?.logo_url)}
 
         <table>
           <thead>

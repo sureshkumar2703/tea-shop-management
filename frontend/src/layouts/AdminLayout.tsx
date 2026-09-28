@@ -64,7 +64,7 @@ export const AdminLayout: React.FC<LayoutProps> = ({ children }) => {
         { label: "Employee List", path: "/admin/employees", icon: <Users className="w-4 h-4" /> },
         { label: "Add Employee", path: "/admin/employees/new", icon: <UserPlus className="w-4 h-4" /> },
         { label: "Admin & Owner List", path: "/admin/admins", icon: <ShieldCheck className="w-4 h-4" /> },
-        { label: "Add Co-Admin", path: "/admin/admins/new", icon: <UserPlus className="w-4 h-4" /> },
+        { label: "Add Co-Owner", path: "/admin/admins/new", icon: <UserPlus className="w-4 h-4" /> },
         { label: "Attendance", path: "/admin/attendance", icon: <CalendarCheck className="w-4 h-4" /> },
         { label: "Payroll & Salary", path: "/admin/salary", icon: <Banknote className="w-4 h-4" /> },
       ],

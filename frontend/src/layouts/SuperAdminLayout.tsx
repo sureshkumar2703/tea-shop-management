@@ -13,6 +13,10 @@ import {
   Menu,
   X,
   ShieldCheck,
+  Receipt,
+  Wallet,
+  UserCheck,
+  Package,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -28,9 +32,13 @@ export const SuperAdminLayout: React.FC<LayoutProps> = ({ children }) => {
   const navItems = [
     { label: "Overview", path: "/super-admin/dashboard", icon: <LayoutDashboard className="w-4 h-4" /> },
     { label: "Shops & Franchises", path: "/super-admin/shops", icon: <Store className="w-4 h-4" /> },
+    { label: "Shop Products & Stock", path: "/super-admin/products", icon: <Package className="w-4 h-4" /> },
     { label: "Shop Admins", path: "/super-admin/admins", icon: <Users className="w-4 h-4" /> },
     { label: "Super Admins", path: "/super-admin/super-admins", icon: <ShieldCheck className="w-4 h-4" /> },
-    { label: "Platform Reports", path: "/super-admin/reports", icon: <BarChart3 className="w-4 h-4" /> },
+    { label: "Shop Bills Report", path: "/super-admin/reports/bills", icon: <Receipt className="w-4 h-4" /> },
+    { label: "Shop Expenses Report", path: "/super-admin/reports/expenses", icon: <Wallet className="w-4 h-4" /> },
+    { label: "Shop Staff & Payroll", path: "/super-admin/reports/employees", icon: <UserCheck className="w-4 h-4" /> },
+    { label: "Platform Analytics", path: "/super-admin/reports", icon: <BarChart3 className="w-4 h-4" /> },
     { label: "System Settings", path: "/super-admin/settings", icon: <Settings className="w-4 h-4" /> },
   ];
 

@@ -114,6 +114,13 @@ export const ReceiptModal: React.FC<ReceiptModalProps> = ({
         >
           {/* Header */}
           <div className="text-center pb-3 border-b border-dashed border-slate-300 dark:border-slate-700">
+            {shop?.logo_url && (
+              <img
+                src={shop.logo_url}
+                alt={shop?.name || "Logo"}
+                className="w-10 h-10 rounded-xl mx-auto mb-1.5 object-cover"
+              />
+            )}
             <h4 className="text-base font-bold tracking-tight font-sans text-slate-900 dark:text-white">
               {shop?.name || "Chai Craft Artisan Bar"}
             </h4>

@@ -146,14 +146,14 @@ export const AdminCreateAdmin: React.FC = () => {
         country: countryName.trim(),
         state: stateName.trim(),
         district: district.trim(),
-        role: "ADMIN",
+        role: "OWNER",
       });
 
       setIsLoading(false);
-      navigate("/admin/employees");
+      navigate("/admin/admins");
     } catch (err: any) {
       setIsLoading(false);
-      setFormError(err?.message || "Failed to create store admin account.");
+      setFormError(err?.message || "Failed to create store owner account.");
     }
   };
 
@@ -161,19 +161,19 @@ export const AdminCreateAdmin: React.FC = () => {
     <AdminLayout>
       <div className="max-w-2xl mx-auto space-y-6">
         <button
-          onClick={() => navigate("/admin/employees")}
+          onClick={() => navigate("/admin/admins")}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Staff & Admins
+          <ArrowLeft className="w-4 h-4" /> Back to Admin & Owner List
         </button>
 
         <div>
           <h1 className="text-2xl font-bold font-['Outfit'] text-slate-900 dark:text-white flex items-center gap-2">
             <ShieldCheck className="w-6 h-6 text-amber-500" />
-            Create Co-Admin / Store Manager
+            Create Co-Owner
           </h1>
           <p className="text-xs text-slate-500">
-            Provision administrative credentials for this franchise with default shop code
+            Provision co-owner credentials for this franchise with default shop code
           </p>
         </div>
 
@@ -207,7 +207,7 @@ export const AdminCreateAdmin: React.FC = () => {
             </div>
 
             <Input
-              label="Admin Full Name *"
+              label="Owner Full Name *"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
               placeholder="e.g. Rohan Verma"
@@ -222,7 +222,7 @@ export const AdminCreateAdmin: React.FC = () => {
                   value={email}
                   onChange={handleEmailChange}
                   onBlur={() => validateEmail(email)}
-                  placeholder="manager@chaicraft.in"
+                  placeholder="owner@chaicraft.in"
                   error={emailError}
                   required
                 />
@@ -333,7 +333,7 @@ export const AdminCreateAdmin: React.FC = () => {
                 type={showPassword ? "text" : "password"}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Enter password for co-admin"
+                placeholder="Enter password for co-owner"
                 required
               />
               <button
@@ -349,13 +349,13 @@ export const AdminCreateAdmin: React.FC = () => {
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() => navigate("/admin/employees")}
+                onClick={() => navigate("/admin/admins")}
                 className="flex-1"
               >
                 Cancel
               </Button>
               <Button type="submit" variant="primary" isLoading={isLoading} className="flex-1">
-                Save & Create Admin
+                Save & Create Co-Owner
               </Button>
             </div>
           </form>

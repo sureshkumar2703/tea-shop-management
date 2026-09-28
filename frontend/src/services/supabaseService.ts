@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { supabase, authRegistrationClient } from "@/lib/supabase";
 import {
   Shop,
   Category,
@@ -1094,8 +1094,33 @@ export const dataService = {
   async createAdmin(adminData: Partial<Profile>): Promise<Profile> {
     const password = adminData.password || "Chai@123456";
     const cleanEmail = (adminData.email || "").trim().toLowerCase();
+    let authUserId: string | undefined;
 
-    // Directly insert / upsert into `public.users` table
+    // 1. Create user in Supabase Auth (auth.users)
+    try {
+      const { data: authData, error: authError } = await authRegistrationClient.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            name: adminData.full_name || "Store Admin",
+            role: adminData.role || "OWNER",
+            shop_id: adminData.shop_id || null,
+            phone: adminData.phone || null,
+          },
+        },
+      });
+
+      if (authError) {
+        console.warn("Supabase Auth registration notice (Admin):", authError.message);
+      } else if (authData?.user?.id) {
+        authUserId = authData.user.id;
+      }
+    } catch (authErr) {
+      console.warn("Supabase Auth signup call warning:", authErr);
+    }
+
+    // 2. Insert / upsert into `public.users` table
     try {
       const userPayload: Record<string, any> = {
         shop_id: adminData.shop_id || null,
@@ -1111,6 +1136,10 @@ export const dataService = {
         district: adminData.district || null,
         is_active: true,
       };
+
+      if (authUserId) {
+        userPayload.id = authUserId;
+      }
 
       let { data, error } = await supabase
         .from("users")
@@ -1157,7 +1186,7 @@ export const dataService = {
     }
 
     const newAdmin: Profile = {
-      id: `admin-${Date.now()}`,
+      id: authUserId || `admin-${Date.now()}`,
       shop_id: adminData.shop_id || MOCK_CURRENT_SHOP.id,
       full_name: adminData.full_name || "Store Admin",
       email: cleanEmail || "admin@chaicraft.in",
@@ -1181,10 +1210,35 @@ export const dataService = {
   async createEmployee(employeeData: Partial<Profile>): Promise<Profile> {
     const password = employeeData.password || "Chai@123456";
     const cleanEmail = (employeeData.email || "").trim().toLowerCase();
+    let authUserId: string | undefined;
 
-    // Directly insert / upsert into `public.users` table
+    // 1. Create user in Supabase Auth (auth.users)
     try {
-      const userPayload = {
+      const { data: authData, error: authError } = await authRegistrationClient.auth.signUp({
+        email: cleanEmail,
+        password: password,
+        options: {
+          data: {
+            name: employeeData.full_name || "Store Staff",
+            role: employeeData.role || "EMPLOYEE",
+            shop_id: employeeData.shop_id || null,
+            phone: employeeData.phone || null,
+          },
+        },
+      });
+
+      if (authError) {
+        console.warn("Supabase Auth registration notice (Employee):", authError.message);
+      } else if (authData?.user?.id) {
+        authUserId = authData.user.id;
+      }
+    } catch (authErr) {
+      console.warn("Supabase Auth signup call warning:", authErr);
+    }
+
+    // 2. Insert / upsert into `public.users` table
+    try {
+      const userPayload: Record<string, any> = {
         shop_id: employeeData.shop_id || null,
         name: employeeData.full_name || "Store Staff",
         email: cleanEmail,
@@ -1198,6 +1252,10 @@ export const dataService = {
         district: employeeData.district || null,
         is_active: true,
       };
+
+      if (authUserId) {
+        userPayload.id = authUserId;
+      }
 
       const { data, error } = await supabase
         .from("users")
@@ -1231,7 +1289,7 @@ export const dataService = {
     }
 
     const newEmp: Profile = {
-      id: `emp-${Date.now()}`,
+      id: authUserId || `emp-${Date.now()}`,
       shop_id: employeeData.shop_id || MOCK_CURRENT_SHOP.id,
       full_name: employeeData.full_name || "Store Staff",
       email: cleanEmail || "staff@chaicraft.in",

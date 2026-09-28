@@ -19,6 +19,7 @@ import {
   Banknote,
   QrCode,
   Users,
+  Receipt,
 } from "lucide-react";
 
 export const SuperAdminReports: React.FC = () => {
@@ -114,6 +115,51 @@ export const SuperAdminReports: React.FC = () => {
               Export CSV
             </Button>
           </div>
+        </div>
+
+        {/* Quick Navigation Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <a
+            href="/super-admin/reports/bills"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-amber-500/50 dark:hover:border-amber-500/50 shadow-sm transition-all group block"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="p-2.5 rounded-xl bg-amber-500/10 text-amber-500 group-hover:bg-amber-500 group-hover:text-white transition-all">
+                <Receipt className="w-5 h-5" />
+              </span>
+              <Badge variant="amber" size="sm">Audit Bills</Badge>
+            </div>
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm">Shop Bill Reports</h3>
+            <p className="text-xs text-slate-500 mt-1">Audit counter sales, orders by day/week/month/year/overall, payment methods & receipts.</p>
+          </a>
+
+          <a
+            href="/super-admin/reports/expenses"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-red-500/50 dark:hover:border-red-500/50 shadow-sm transition-all group block"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="p-2.5 rounded-xl bg-red-500/10 text-red-500 group-hover:bg-red-500 group-hover:text-white transition-all">
+                <Banknote className="w-5 h-5" />
+              </span>
+              <Badge variant="danger" size="sm">Track Spend</Badge>
+            </div>
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm">Shop Expense Reports</h3>
+            <p className="text-xs text-slate-500 mt-1">Audit operational expenses, daily milk/supplies, settlements by day/week/month/year/overall.</p>
+          </a>
+
+          <a
+            href="/super-admin/reports/employees"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-blue-500/50 dark:hover:border-blue-500/50 shadow-sm transition-all group block"
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="p-2.5 rounded-xl bg-blue-500/10 text-blue-500 group-hover:bg-blue-500 group-hover:text-white transition-all">
+                <Users className="w-5 h-5" />
+              </span>
+              <Badge variant="info" size="sm">Staff & Payroll</Badge>
+            </div>
+            <h3 className="font-bold text-slate-900 dark:text-white text-sm">Shop Staff & Payroll Reports</h3>
+            <p className="text-xs text-slate-500 mt-1">Select shop to view employee roster, individual sales reports & monthly salary ledger.</p>
+          </a>
         </div>
 
         {/* Selected Shop Context Banner */}

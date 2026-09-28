@@ -10,6 +10,7 @@ import { dataService } from "@/services/supabaseService";
 import { useAuthStore } from "@/stores/authStore";
 import { Expense, Profile } from "@/types";
 import { formatCurrency, formatDate, getLocalDateStr, isSameLocalDate } from "@/lib/utils";
+import { getPdfWatermarkCss, getPdfWatermarkHtml, getPdfHeaderHtml } from "@/lib/pdfUtils";
 import {
   DollarSign,
   Users,
@@ -165,12 +166,18 @@ export const UserExpenseReport: React.FC = () => {
       const yStr = getLocalDateStr(y);
       list = list.filter((e) => isSameLocalDate(e.expense_date || e.created_at, yStr));
     } else if (selectedPeriod === "THIS_WEEK") {
-      const d = new Date();
+      const d = new Date(now);
       const day = d.getDay();
       const diff = d.getDate() - day + (day === 0 ? -6 : 1);
       const monday = new Date(d.setDate(diff));
-      monday.setHours(0, 0, 0, 0);
-      list = list.filter((e) => new Date(e.expense_date || e.created_at) >= monday);
+      const mondayStr = getLocalDateStr(monday);
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+      const sundayStr = getLocalDateStr(sunday);
+      list = list.filter((e) => {
+        const dStr = getLocalDateStr(e.expense_date || e.created_at);
+        return dStr >= mondayStr && dStr <= sundayStr;
+      });
     } else if (selectedPeriod === "THIS_MONTH") {
       const monthPrefix = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
       list = list.filter((e) => {
@@ -345,16 +352,18 @@ export const UserExpenseReport: React.FC = () => {
       })
       .join("");
 
+    const shopAddress = shop?.address || "";
+
     const html = `
       <!DOCTYPE html>
       <html>
       <head>
-        <title>User Expense Report - ${userName}</title>
+        <title>User Expense Report - ${userName} - ${shopName}</title>
         <style>
-          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 24px; color: #1e293b; line-height: 1.4; }
-          .header { display: flex; justify-content: space-between; border-bottom: 2px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 20px; }
-          .shop-title { font-size: 22px; font-weight: 800; color: #0f172a; margin: 0; }
-          .report-badge { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 13px; display: inline-block; margin-bottom: 4px; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 24px; color: #1e293b; line-height: 1.4; position: relative; }
+          .shop-title { font-size: 20px; font-weight: 800; color: #0f172a; margin: 0; }
+          .shop-meta { font-size: 11px; color: #64748b; margin-top: 2px; }
+          .report-badge { background: #fef3c7; color: #92400e; padding: 4px 10px; border-radius: 6px; font-weight: 700; font-size: 12px; display: inline-block; margin-bottom: 4px; }
           .user-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; }
           .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
           .stat-box { background: #f1f5f9; padding: 12px; border-radius: 8px; text-align: center; border-left: 4px solid #f59e0b; }
@@ -368,20 +377,13 @@ export const UserExpenseReport: React.FC = () => {
           td { border: 1px solid #e2e8f0; padding: 8px 10px; }
           tr:nth-child(even) { background: #f8fafc; }
           .footer { margin-top: 24px; text-align: center; font-size: 11px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 10px; }
+          ${getPdfWatermarkCss()}
           @media print { body { padding: 0; } @page { size: landscape; margin: 12mm; } }
         </style>
       </head>
       <body>
-        <div class="header">
-          <div>
-            <h1 class="shop-title">${shopName}</h1>
-            <div style="font-size: 12px; color: #64748b; margin-top: 4px;">Staff Expense & Petty Cash Ledger</div>
-          </div>
-          <div style="text-align: right;">
-            <div class="report-badge">STAFF / USER EXPENSE REPORT</div>
-            <div style="font-size: 11px; color: #64748b; margin-top: 2px;">Generated: ${new Date().toLocaleString()}</div>
-          </div>
-        </div>
+        ${getPdfWatermarkHtml(shopName, shop?.logo_url)}
+        ${getPdfHeaderHtml(shopName, shopAddress, `STAFF EXPENSE REPORT (${userName})`, shop?.logo_url)}
 
         <div class="user-card">
           <div>
