@@ -183,7 +183,7 @@ export const AppRoutes: React.FC = () => {
           user && role ? (
             <Navigate to={getDefaultDashboard(role)} replace />
           ) : (
-            <Navigate to="/setup" replace />
+            <Navigate to="/login" replace />
           )
         }
       />

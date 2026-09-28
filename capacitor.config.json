@@ -1,0 +1,5 @@
+{
+  "appId": "com.teashop.management",
+  "appName": "Tea Shop Management",
+  "webDir": "frontend/dist"
+}
