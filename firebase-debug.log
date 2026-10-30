@@ -1,0 +1,31 @@
+[debug] [2026-10-30T10:23:55.517Z] ----------------------------------------------------------------------
+[debug] [2026-10-30T10:23:55.519Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\Algojaxon\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only hosting
+[debug] [2026-10-30T10:23:55.520Z] CLI Version:   15.8.0
+[debug] [2026-10-30T10:23:55.520Z] Platform:      win32
+[debug] [2026-10-30T10:23:55.520Z] Node Version:  v24.3.0
+[debug] [2026-10-30T10:23:55.520Z] Time:          Fri Oct 30 2026 15:53:55 GMT+0530 (India Standard Time)
+[debug] [2026-10-30T10:23:55.520Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-10-30T10:24:32.726Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-10-30T10:24:32.727Z] > authorizing via signed-in user (msureshkumar27032001@gmail.com)
+[debug] [2026-10-30T10:24:32.727Z] [iam] checking project tea-shop-management for permissions ["firebase.projects.get","firebasehosting.sites.update"]
+[debug] [2026-10-30T10:24:32.729Z] Checked if tokens are valid: true, expires at: 1793359012860
+[debug] [2026-10-30T10:24:32.729Z] Checked if tokens are valid: true, expires at: 1793359012860
+[debug] [2026-10-30T10:24:32.730Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/tea-shop-management:testIamPermissions [none]
+[debug] [2026-10-30T10:24:32.730Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/tea-shop-management:testIamPermissions  x-goog-user-project=tea-shop-management
+[debug] [2026-10-30T10:24:32.730Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tea-shop-management:testIamPermissions {"permissions":["firebase.projects.get","firebasehosting.sites.update"]}
+[debug] [2026-10-30T10:24:34.386Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/tea-shop-management:testIamPermissions 403
+[debug] [2026-10-30T10:24:34.386Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/tea-shop-management:testIamPermissions {"error":{"code":403,"message":"Caller does not have required permission to use project tea-shop-management. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=tea-shop-management and then retry. Propagation of the new permission may take a few minutes.","status":"PERMISSION_DENIED","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","reason":"USER_PROJECT_DENIED","domain":"googleapis.com","metadata":{"consoleUrl":"https://console.developers.google.com/iam-admin/iam?project=tea-shop-management","service":"cloudresourcemanager.googleapis.com","consumer":"projects/tea-shop-management","containerInfo":"tea-shop-management"}},{"@type":"type.googleapis.com/google.rpc.LocalizedMessage","locale":"en-US","message":"Caller does not have required permission to use project tea-shop-management. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=tea-shop-management and then retry. Propagation of the new permission may take a few minutes."},{"@type":"type.googleapis.com/google.rpc.Help","links":[{"description":"Google developer console IAM admin","url":"https://console.developers.google.com/iam-admin/iam?project=tea-shop-management"}]}]}}
+[debug] [2026-10-30T10:24:34.387Z] [iam] error while checking permissions, command may fail: Request to https://cloudresourcemanager.googleapis.com/v1/projects/tea-shop-management:testIamPermissions had HTTP Error: 403, Caller does not have required permission to use project tea-shop-management. Grant the caller the roles/serviceusage.serviceUsageConsumer role, or a custom role with the serviceusage.services.use permission, by visiting https://console.developers.google.com/iam-admin/iam?project=tea-shop-management and then retry. Propagation of the new permission may take a few minutes.
+[debug] [2026-10-30T10:24:34.387Z] Checked if tokens are valid: true, expires at: 1793359012860
+[debug] [2026-10-30T10:24:34.387Z] Checked if tokens are valid: true, expires at: 1793359012860
+[debug] [2026-10-30T10:24:34.387Z] >>> [apiv2][query] GET https://firebase.googleapis.com/v1beta1/projects/tea-shop-management [none]
+[debug] [2026-10-30T10:24:35.178Z] <<< [apiv2][status] GET https://firebase.googleapis.com/v1beta1/projects/tea-shop-management 403
+[debug] [2026-10-30T10:24:35.178Z] <<< [apiv2][body] GET https://firebase.googleapis.com/v1beta1/projects/tea-shop-management {"error":{"code":403,"message":"The caller does not have permission","status":"PERMISSION_DENIED"}}
+[debug] [2026-10-30T10:24:35.178Z] Request to https://firebase.googleapis.com/v1beta1/projects/tea-shop-management had HTTP Error: 403, The caller does not have permission
+[debug] [2026-10-30T10:24:35.181Z] FirebaseError: Request to https://firebase.googleapis.com/v1beta1/projects/tea-shop-management had HTTP Error: 403, The caller does not have permission
+    at responseToError (C:\Users\Algojaxon\AppData\Roaming\npm\node_modules\firebase-tools\lib\responseToError.js:53:12)
+    at RetryOperation._fn (C:\Users\Algojaxon\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:330:77)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+[error] 
+[error] Error: Failed to get Firebase project tea-shop-management. Please make sure the project exists and your account has permission to access it.

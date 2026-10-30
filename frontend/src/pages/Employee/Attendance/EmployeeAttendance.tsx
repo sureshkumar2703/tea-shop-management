@@ -303,7 +303,7 @@ export const EmployeeAttendance: React.FC = () => {
               </h1>
             </div>
             <p className="text-xs text-slate-500 mt-1">
-              Store: {shop?.name || "Chai Craft"} &bull; Logged in as: <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.name || user?.full_name || "Employee"}</span>
+              Store: {shop?.name || "Chai Craft"} &bull; Logged in as: <span className="font-semibold text-slate-700 dark:text-slate-300">{user?.full_name || "Employee"}</span>
             </p>
           </div>
 
@@ -572,12 +572,12 @@ export const EmployeeAttendance: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-amber-500/20">
-                  {user?.name?.charAt(0).toUpperCase() || user?.full_name?.charAt(0).toUpperCase() || "E"}
+                  {user?.full_name?.charAt(0).toUpperCase() || "E"}
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                      {user?.name || user?.full_name || "My Attendance"}
+                      {user?.full_name || "My Attendance"}
                     </h3>
                     <Badge variant="neutral" size="sm" className="text-[10px]">
                       {user?.role || "EMPLOYEE"}
