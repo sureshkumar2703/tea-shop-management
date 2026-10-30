@@ -30,6 +30,7 @@ interface CartState {
   setCustomerInfo: (name: string, phone: string) => void;
   setOrderType: (type: "DINE_IN" | "TAKEAWAY" | "DELIVERY") => void;
   setDiscount: (amount: number, reason?: string) => void;
+  setTaxRate: (rate: number) => void;
   
   // Computations
   getSubtotal: () => number;
@@ -161,6 +162,7 @@ export const useCartStore = create<CartState>((set, get) => ({
   setCustomerInfo: (customerName, customerPhone) => set({ customerName, customerPhone }),
   setOrderType: (orderType) => set({ orderType }),
   setDiscount: (discountAmount, discountReason = "") => set({ discountAmount, discountReason }),
+  setTaxRate: (taxRate) => set({ taxRate }),
 
   getSubtotal: () => {
     return get().items.reduce((sum, item) => sum + item.subtotal, 0);

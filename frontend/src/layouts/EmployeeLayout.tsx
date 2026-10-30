@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Logo } from "@/components/common/Logo";
 import { Badge } from "@/components/ui/Badge";
 import { useAuthStore } from "@/stores/authStore";
+import { dataService } from "@/services/supabaseService";
 import {
   LayoutDashboard,
   Receipt,
@@ -15,6 +16,7 @@ import {
   X,
   Clock,
   DollarSign,
+  CalendarCheck,
 } from "lucide-react";
 
 interface LayoutProps {
@@ -26,16 +28,31 @@ export const EmployeeLayout: React.FC<LayoutProps> = ({ children }) => {
   const navigate = useNavigate();
   const { user, shop, logout } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const [clockedIn, setClockedIn] = useState(true);
+  const [attendanceStatus, setAttendanceStatus] = useState<string>("CHECKING");
 
   const navItems = [
     { label: "Dashboard", path: "/employee/dashboard", icon: <LayoutDashboard className="w-5 h-5" /> },
     { label: "POS Terminal", path: "/employee/billing", icon: <Receipt className="w-5 h-5" /> },
     { label: "Daily Expenses", path: "/employee/expenses", icon: <DollarSign className="w-5 h-5" /> },
+    { label: "My Attendance", path: "/employee/attendance", icon: <CalendarCheck className="w-5 h-5" /> },
     { label: "Bills & Expenses", path: "/employee/reports", icon: <BarChart2 className="w-5 h-5" /> },
     { label: "My Salary Report", path: "/employee/salary", icon: <FileText className="w-5 h-5" /> },
     { label: "My Profile", path: "/employee/profile", icon: <User className="w-5 h-5" /> },
   ];
+
+  useEffect(() => {
+    if (shop?.id && user?.id) {
+      dataService.getTodayUserAttendance(shop.id, user.id).then((record) => {
+        if (!record) {
+          setAttendanceStatus("NOT_MARKED");
+        } else if (record.out_time || record.check_out) {
+          setAttendanceStatus("COMPLETED");
+        } else {
+          setAttendanceStatus("PRESENT");
+        }
+      });
+    }
+  }, [shop?.id, user?.id, location.pathname]);
 
   const handleLogout = () => {
     logout();
@@ -75,15 +92,23 @@ export const EmployeeLayout: React.FC<LayoutProps> = ({ children }) => {
           {/* Clock In / Out Quick Pill */}
           <div className="mt-3">
             <button
-              onClick={() => setClockedIn(!clockedIn)}
+              onClick={() => navigate("/employee/attendance")}
               className={`w-full py-1.5 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
-                clockedIn
+                attendanceStatus === "PRESENT"
                   ? "bg-emerald-50 text-emerald-700 border border-emerald-300/60 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  : attendanceStatus === "COMPLETED"
+                  ? "bg-blue-50 text-blue-700 border border-blue-300/60 dark:bg-blue-950/40 dark:text-blue-300"
                   : "bg-amber-50 text-amber-700 border border-amber-300/60 dark:bg-amber-950/40 dark:text-amber-300"
               }`}
             >
               <Clock className="w-3.5 h-3.5" />
-              <span>{clockedIn ? "Clocked In (Active Shift)" : "Clocked Out"}</span>
+              <span>
+                {attendanceStatus === "PRESENT"
+                  ? "Punched In (Active)"
+                  : attendanceStatus === "COMPLETED"
+                  ? "Shift Completed"
+                  : "Punch Attendance"}
+              </span>
             </button>
           </div>
         </div>
@@ -109,7 +134,6 @@ export const EmployeeLayout: React.FC<LayoutProps> = ({ children }) => {
             );
           })}
         </nav>
-
 
         {/* User Footer */}
         <div className="p-4 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">

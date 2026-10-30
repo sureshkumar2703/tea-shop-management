@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/Badge";
 import { dataService } from "@/services/supabaseService";
 import { Shop } from "@/types";
 import { formatDate } from "@/lib/utils";
-import { ArrowLeft, Store, Calendar, MapPin, Phone, Mail, FileText, CheckCircle2 } from "lucide-react";
+import { ArrowLeft, Store, Calendar, MapPin, Phone, Mail, FileText, CheckCircle2, Clock } from "lucide-react";
 
 export const ShopDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -113,6 +113,16 @@ export const ShopDetails: React.FC = () => {
                 <div>
                   <span className="text-xs text-slate-400 block">Store Tax Rate</span>
                   <span className="font-medium text-slate-800 dark:text-slate-200">{shop.tax_rate}% (CGST + SGST)</span>
+                </div>
+              </div>
+
+              <div className="flex items-start gap-3">
+                <Clock className="w-4 h-4 text-emerald-600 mt-0.5" />
+                <div>
+                  <span className="text-xs text-slate-400 block">Staff Attendance Mode</span>
+                  <span className="font-medium text-slate-800 dark:text-slate-200">
+                    {shop.attendance_type === "DOUBLE" ? "Double Way (Punch In & Out)" : "Single Way (Punch In Only)"}
+                  </span>
                 </div>
               </div>
 

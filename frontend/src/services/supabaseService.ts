@@ -10,6 +10,7 @@ import {
   CashRegister,
   Salary,
   Attendance,
+  AttendanceStatus,
   Profile,
   UserRole,
   Datepay,
@@ -49,6 +50,7 @@ const STORAGE_KEYS = {
   DATEPAYS: "chaicraft_datepays",
   SALARIES: "chaicraft_salaries",
   ADDONS: "chaicraft_addons",
+  ATTENDANCE: "chaicraft_attendance",
 };
 
 // In-memory runtime cache for data session (NO localStorage persistence except chaicraft_auth_session)
@@ -67,8 +69,8 @@ export const dataService = {
   // SHOPS
   async getShops(): Promise<Shop[]> {
     try {
-      const { data, error } = await supabase.from("shops").select("*").order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
+      let { data, error } = await supabase.from("shops").select("*").order("created_at", { ascending: false });
+      if (!error && data) {
         return data.map((row: any) => ({
           id: row.id,
           name: row.name || row.shop_name || "Artisan Chai Store",
@@ -83,7 +85,7 @@ export const dataService = {
           phone: row.phone || "",
           email: row.email || "",
           currency: row.currency || "INR",
-          tax_rate: row.tax_rate ?? 5.0,
+          tax_rate: row.tax_rate !== undefined && row.tax_rate !== null ? Number(row.tax_rate) : 0,
           subscription_status: row.subscription_status || "ACTIVE",
           subscription_start_date: row.subscription_start_date || row.start_date || row.created_at,
           subscription_end_date: row.subscription_end_date || row.expiry_date,
@@ -93,6 +95,8 @@ export const dataService = {
           logo_url: row.logo_url || row.shop_image || "",
           gpay_qr_url: row.gpay_qr_url || row.gpay_qr_image || "",
           gst_number: row.gst_number || "",
+          receipt_footer: row.receipt_footer || "",
+          attendance_type: (row.attendance_type as "SINGLE" | "DOUBLE") || "SINGLE",
           is_active: row.is_active ?? true,
           created_at: row.created_at,
           updated_at: row.updated_at,
@@ -124,7 +128,7 @@ export const dataService = {
       phone: shopData.phone || "",
       email: shopData.email || "",
       currency: "INR",
-      tax_rate: shopData.tax_rate || 5.0,
+      tax_rate: shopData.tax_rate !== undefined && !isNaN(Number(shopData.tax_rate)) ? Number(shopData.tax_rate) : 0,
       subscription_status: shopData.subscription_status || "ACTIVE",
       start_date: shopData.start_date || new Date().toISOString().split("T")[0],
       expiry_date: shopData.is_lifetime ? null : shopData.expiry_date,
@@ -134,11 +138,22 @@ export const dataService = {
       gpay_qr_url: shopData.gpay_qr_url || "",
       gpay_qr_image: shopData.gpay_qr_url || "",
       gst_number: shopData.gst_number || "",
+      receipt_footer: shopData.receipt_footer || "",
+      attendance_type: shopData.attendance_type || "SINGLE",
       is_active: shopData.is_active !== undefined ? shopData.is_active : true,
     };
 
     try {
-      const { data, error } = await supabase.from("shops").insert([payload]).select().single();
+      let { data, error } = await supabase.from("shops").insert([payload]).select().single();
+      if (error && (error.message?.includes("receipt_footer") || error.message?.includes("attendance_type") || error.code === "PGRST204")) {
+        console.warn("Retrying createShop without unmigrated schema columns...", error.message);
+        const retryPayload = { ...payload };
+        delete retryPayload.receipt_footer;
+        delete retryPayload.attendance_type;
+        const retryResult = await supabase.from("shops").insert([retryPayload]).select().single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
       if (!error && data) {
         return {
           id: data.id,
@@ -154,7 +169,7 @@ export const dataService = {
           phone: data.phone,
           email: data.email,
           currency: data.currency,
-          tax_rate: data.tax_rate,
+          tax_rate: data.tax_rate !== undefined && data.tax_rate !== null ? Number(data.tax_rate) : 0,
           subscription_status: data.subscription_status,
           start_date: data.start_date,
           expiry_date: data.expiry_date,
@@ -162,6 +177,8 @@ export const dataService = {
           logo_url: data.logo_url || data.shop_image,
           gpay_qr_url: data.gpay_qr_url || data.gpay_qr_image,
           gst_number: data.gst_number,
+          receipt_footer: data.receipt_footer !== undefined ? data.receipt_footer : (shopData.receipt_footer || ""),
+          attendance_type: data.attendance_type ? ((data.attendance_type as "SINGLE" | "DOUBLE") || "SINGLE") : (shopData.attendance_type || "SINGLE"),
           is_active: data.is_active,
           created_at: data.created_at,
           updated_at: data.updated_at,
@@ -187,7 +204,7 @@ export const dataService = {
       phone: shopData.phone || "",
       email: shopData.email || "",
       currency: "INR",
-      tax_rate: shopData.tax_rate || 5.0,
+      tax_rate: shopData.tax_rate !== undefined && !isNaN(Number(shopData.tax_rate)) ? Number(shopData.tax_rate) : 0,
       subscription_status: "ACTIVE",
       subscription_start_date: shopData.subscription_start_date || new Date().toISOString(),
       subscription_end_date: shopData.subscription_end_date || new Date(Date.now() + 365 * 86400000).toISOString(),
@@ -196,6 +213,9 @@ export const dataService = {
       is_lifetime: shopData.is_lifetime || false,
       logo_url: shopData.logo_url,
       gpay_qr_url: shopData.gpay_qr_url,
+      gst_number: shopData.gst_number || "",
+      receipt_footer: shopData.receipt_footer || "",
+      attendance_type: shopData.attendance_type || "SINGLE",
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
@@ -206,6 +226,125 @@ export const dataService = {
     return newShop;
   },
 
+  async updateShop(id: string, shopData: Partial<Shop>): Promise<Shop> {
+    const payload: Record<string, any> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (shopData.name !== undefined) {
+      payload.name = shopData.name;
+      payload.shop_name = shopData.name;
+    }
+    if (shopData.tagline !== undefined) payload.tagline = shopData.tagline;
+    if (shopData.address !== undefined) payload.address = shopData.address;
+    if (shopData.country !== undefined) payload.country = shopData.country;
+    if (shopData.state !== undefined) payload.state = shopData.state;
+    if (shopData.city !== undefined) payload.city = shopData.city;
+    if (shopData.pincode !== undefined) payload.pincode = shopData.pincode;
+    if (shopData.phone !== undefined) payload.phone = shopData.phone;
+    if (shopData.email !== undefined) payload.email = shopData.email;
+    if (shopData.gst_number !== undefined) payload.gst_number = shopData.gst_number;
+    if (shopData.tax_rate !== undefined && !isNaN(Number(shopData.tax_rate))) {
+      payload.tax_rate = Number(shopData.tax_rate);
+    }
+    if (shopData.receipt_footer !== undefined) payload.receipt_footer = shopData.receipt_footer;
+    if (shopData.attendance_type !== undefined) payload.attendance_type = shopData.attendance_type;
+    if (shopData.logo_url !== undefined) {
+      payload.logo_url = shopData.logo_url;
+      payload.shop_image = shopData.logo_url;
+    }
+    if (shopData.gpay_qr_url !== undefined) {
+      payload.gpay_qr_url = shopData.gpay_qr_url;
+      payload.gpay_qr_image = shopData.gpay_qr_url;
+    }
+    if (shopData.subscription_status !== undefined) payload.subscription_status = shopData.subscription_status;
+    if (shopData.expiry_date !== undefined) payload.expiry_date = shopData.expiry_date;
+    if (shopData.is_lifetime !== undefined) payload.is_lifetime = shopData.is_lifetime;
+    if (shopData.is_active !== undefined) payload.is_active = shopData.is_active;
+
+    try {
+      let { data, error } = await supabase
+        .from("shops")
+        .update(payload)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error && (error.message?.includes("receipt_footer") || error.message?.includes("attendance_type") || error.code === "PGRST204")) {
+        console.warn("Retrying updateShop without unmigrated schema columns...", error.message);
+        const retryPayload = { ...payload };
+        delete retryPayload.receipt_footer;
+        delete retryPayload.attendance_type;
+        const retryResult = await supabase
+          .from("shops")
+          .update(retryPayload)
+          .eq("id", id)
+          .select()
+          .single();
+        data = retryResult.data;
+        error = retryResult.error;
+      }
+
+      if (!error && data) {
+        const updatedShop: Shop = {
+          id: data.id,
+          name: data.name || data.shop_name,
+          slug: data.slug,
+          shop_code: data.shop_code,
+          tagline: data.tagline,
+          address: data.address,
+          country: data.country,
+          state: data.state,
+          city: data.city,
+          pincode: data.pincode,
+          phone: data.phone,
+          email: data.email,
+          currency: data.currency || "INR",
+          tax_rate: data.tax_rate !== undefined && data.tax_rate !== null ? Number(data.tax_rate) : 0,
+          subscription_status: data.subscription_status,
+          subscription_start_date: data.subscription_start_date || data.start_date || data.created_at,
+          subscription_end_date: data.subscription_end_date || data.expiry_date,
+          start_date: data.start_date,
+          expiry_date: data.expiry_date,
+          is_lifetime: data.is_lifetime,
+          logo_url: data.logo_url || data.shop_image,
+          gpay_qr_url: data.gpay_qr_url || data.gpay_qr_image,
+          gst_number: data.gst_number,
+          receipt_footer: data.receipt_footer !== undefined ? data.receipt_footer : (shopData.receipt_footer || ""),
+          attendance_type: data.attendance_type ? ((data.attendance_type as "SINGLE" | "DOUBLE") || "SINGLE") : (shopData.attendance_type || "SINGLE"),
+          is_active: data.is_active,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+        };
+
+        const currentShops = getStoredOr<Shop[]>(STORAGE_KEYS.SHOPS, []);
+        const updatedList = currentShops.map((s) => (s.id === id ? { ...s, ...updatedShop } : s));
+        setStored(STORAGE_KEYS.SHOPS, updatedList);
+
+        return updatedShop;
+      }
+      if (error) {
+        console.error("Supabase updateShop error:", error.message, error.details);
+      }
+    } catch (e) {
+      console.warn("Supabase updateShop fallback", e);
+    }
+
+    const currentShops = getStoredOr<Shop[]>(STORAGE_KEYS.SHOPS, MOCK_SHOPS_LIST);
+    const existing = currentShops.find((s) => s.id === id);
+    const updatedShop: Shop = {
+      ...(existing || ({} as Shop)),
+      ...shopData,
+      id,
+      tax_rate: shopData.tax_rate !== undefined && !isNaN(Number(shopData.tax_rate)) ? Number(shopData.tax_rate) : (existing?.tax_rate ?? 0),
+      attendance_type: shopData.attendance_type || existing?.attendance_type || "SINGLE",
+      updated_at: new Date().toISOString(),
+    } as Shop;
+
+    const updatedList = currentShops.map((s) => (s.id === id ? updatedShop : s));
+    setStored(STORAGE_KEYS.SHOPS, updatedList);
+    return updatedShop;
+  },
+
   // CATEGORIES
   async getCategories(shopId?: string, onlyActive = false): Promise<Category[]> {
     try {
@@ -213,7 +352,7 @@ export const dataService = {
       if (shopId) query = query.eq("shop_id", shopId);
       if (onlyActive) query = query.eq("is_active", true);
       const { data, error } = await query.order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) return data as Category[];
+      if (!error && data) return data as Category[];
       if (error) {
         console.warn("Supabase getCategories error:", error.message);
       }
@@ -221,8 +360,10 @@ export const dataService = {
       console.warn("Categories fallback", e);
     }
     const current = getStoredOr(STORAGE_KEYS.CATEGORIES, MOCK_CATEGORIES);
-    if (onlyActive) return current.filter((c) => c.is_active);
-    return current;
+    let result = current;
+    if (shopId) result = result.filter((c) => c.shop_id === shopId);
+    if (onlyActive) return result.filter((c) => c.is_active);
+    return result;
   },
 
   async createCategory(catData: Partial<Category>): Promise<Category> {
@@ -239,7 +380,7 @@ export const dataService = {
       if (catData.slug) payload.slug = catData.slug;
       if (catData.sort_order !== undefined) payload.sort_order = catData.sort_order;
 
-      const { data, error } = await supabase.from("categories").insert([payload]).select().single();
+      let { data, error } = await supabase.from("categories").insert([payload]).select().single();
       if (!error && data) return data as Category;
 
       // If failed due to optional columns like 'slug' or 'sort_order' missing in DB table, retry with minimal fields
@@ -287,7 +428,7 @@ export const dataService = {
       if (catData.slug !== undefined) payload.slug = catData.slug;
       if (catData.sort_order !== undefined) payload.sort_order = catData.sort_order;
 
-      const { data, error } = await supabase.from("categories").update(payload).eq("id", id).select().single();
+      let { data, error } = await supabase.from("categories").update(payload).eq("id", id).select().single();
       if (!error && data) return data as Category;
       if (error) {
         console.error("Supabase updateCategory error:", error.message, error.details);
@@ -323,6 +464,7 @@ export const dataService = {
     try {
       let query = supabase.from("addons").select("*").eq("is_available", true);
       if (shopId) query = query.eq("shop_id", shopId);
+
       const { data, error } = await query;
       if (!error && data && data.length > 0) return data;
     } catch (e) {
@@ -338,7 +480,7 @@ export const dataService = {
       if (shopId) query = query.eq("shop_id", shopId);
       if (onlyAvailable) query = query.eq("is_available", true);
       const { data, error } = await query.order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data.map((row: any) => ({
           ...row,
           is_active: row.is_active ?? row.is_available ?? true,
@@ -351,13 +493,15 @@ export const dataService = {
       console.warn("Products fallback", e);
     }
     const current = getStoredOr<Product[]>(STORAGE_KEYS.PRODUCTS, MOCK_PRODUCTS);
-    if (onlyAvailable) return current.filter((p) => p.is_available !== false && p.is_active !== false);
-    return current;
+    let result = current;
+    if (shopId) result = result.filter((p) => p.shop_id === shopId);
+    if (onlyAvailable) return result.filter((p) => p.is_available !== false && p.is_active !== false);
+    return result;
   },
 
   async getProductById(id: string): Promise<Product | null> {
     try {
-      const { data, error } = await supabase.from("products").select("*, variants:product_variants(*)").eq("id", id).single();
+      let { data, error } = await supabase.from("products").select("*, variants:product_variants(*)").eq("id", id).single();
       if (!error && data) {
         return {
           ...data,
@@ -397,7 +541,7 @@ export const dataService = {
       if (rest.sku) payload.sku = rest.sku;
       if (rest.preparation_time_minutes) payload.preparation_time_minutes = rest.preparation_time_minutes;
 
-      const { data, error } = await supabase.from("products").insert([payload]).select().single();
+      let { data, error } = await supabase.from("products").insert([payload]).select().single();
       if (!error && data) {
         let insertedVariants: any[] = [];
         if (variants && variants.length > 0) {
@@ -488,7 +632,7 @@ export const dataService = {
       if (rest.sku !== undefined) payload.sku = rest.sku;
       if (rest.preparation_time_minutes !== undefined) payload.preparation_time_minutes = rest.preparation_time_minutes;
 
-      const { data, error } = await supabase.from("products").update(payload).eq("id", id).select().single();
+      let { data, error } = await supabase.from("products").update(payload).eq("id", id).select().single();
       if (error) {
         console.error("Supabase updateProduct error:", error.message, error.details);
       }
@@ -579,6 +723,7 @@ export const dataService = {
     try {
       let query = supabase.from("inventory_items").select("*");
       if (shopId) query = query.eq("shop_id", shopId);
+
       const { data, error } = await query;
       if (!error && data && data.length > 0) return data as InventoryItem[];
     } catch (e) {
@@ -605,7 +750,7 @@ export const dataService = {
       if (shopId) query = query.eq("shop_id", shopId);
       if (onlyActive) query = query.eq("is_active", true);
       const { data, error } = await query.order("created_at", { ascending: false });
-      if (!error && data && data.length > 0) {
+      if (!error && data) {
         return data.map((row: any) => ({
           ...row,
           company_name: row.company_name || row.name,
@@ -621,8 +766,10 @@ export const dataService = {
       console.warn("Suppliers fallback", e);
     }
     const current = getStoredOr<Supplier[]>(STORAGE_KEYS.SUPPLIERS, MOCK_SUPPLIERS);
-    if (onlyActive) return current.filter((s) => s.is_active !== false);
-    return current;
+    let result = current;
+    if (shopId) result = result.filter((s) => s.shop_id === shopId);
+    if (onlyActive) return result.filter((s) => s.is_active !== false);
+    return result;
   },
 
   async createSupplier(supData: Partial<Supplier>): Promise<Supplier> {
@@ -645,7 +792,7 @@ export const dataService = {
     };
 
     try {
-      const { data, error } = await supabase.from("suppliers").insert([payload]).select().single();
+      let { data, error } = await supabase.from("suppliers").insert([payload]).select().single();
       if (!error && data) {
         const fullSupplier: Supplier = {
           ...data,
@@ -708,7 +855,7 @@ export const dataService = {
     if (supData.is_active !== undefined) payload.is_active = supData.is_active;
 
     try {
-      const { data, error } = await supabase.from("suppliers").update(payload).eq("id", id).select().single();
+      let { data, error } = await supabase.from("suppliers").update(payload).eq("id", id).select().single();
       if (!error && data) {
         const fullSupplier: Supplier = {
           ...data,
@@ -775,6 +922,7 @@ export const dataService = {
     try {
       let query = supabase.from("expenses").select("*, user:user_id(id, name, email)").order("expense_date", { ascending: false }).order("created_at", { ascending: false });
       if (shopId) query = query.eq("shop_id", shopId);
+
       const { data, error } = await query;
       if (!error && data && data.length > 0) return data as Expense[];
 
@@ -816,7 +964,7 @@ export const dataService = {
     };
 
     try {
-      const { data, error } = await supabase.from("expenses").insert([payload]).select().single();
+      let { data, error } = await supabase.from("expenses").insert([payload]).select().single();
       if (!error && data) return data as Expense;
       if (error) {
         console.warn("Expense insert full payload error, trying base columns:", error.message);
@@ -863,7 +1011,7 @@ export const dataService = {
     if (balanceAmountVal !== undefined) payload.balance_amount = balanceAmountVal;
 
     try {
-      const { data, error } = await supabase.from("expenses").update(payload).eq("id", id).select().single();
+      let { data, error } = await supabase.from("expenses").update(payload).eq("id", id).select().single();
       if (!error && data) return data as Expense;
       if (error) {
         console.warn("Expense update error:", error.message);
@@ -899,6 +1047,7 @@ export const dataService = {
     try {
       let query = supabase.from("orders").select("*, items:order_items(*, addons:order_item_addons(*))").order("created_at", { ascending: false });
       if (shopId) query = query.eq("shop_id", shopId);
+
       const { data, error } = await query;
       if (!error && data && data.length > 0) return data as Order[];
     } catch (e) {
@@ -1021,6 +1170,7 @@ export const dataService = {
     try {
       let query = supabase.from("cash_registers").select("*").eq("status", "OPEN").order("opened_at", { ascending: false }).limit(1);
       if (shopId) query = query.eq("shop_id", shopId);
+
       const { data, error } = await query;
       if (!error && data && data.length > 0) return data[0] as CashRegister;
     } catch (e) {
@@ -1041,10 +1191,11 @@ export const dataService = {
   // EMPLOYEES & PROFILES
   async getEmployees(shopId?: string): Promise<Profile[]> {
     try {
-      let query = supabase.from("users").select("*");
+      const { data, error } = await (shopId ? supabase.from("users").select("*").eq("shop_id", shopId) : supabase.from("users").select("*"));
+      let query: any = { eq: () => null };
       if (shopId) query = query.eq("shop_id", shopId);
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+
+      if (!error && data) {
         return data.map((row: any) => ({
           id: row.id,
           shop_id: row.shop_id ?? undefined,
@@ -1257,7 +1408,7 @@ export const dataService = {
         userPayload.id = authUserId;
       }
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("users")
         .upsert([userPayload], { onConflict: "email" })
         .select()
@@ -1313,9 +1464,10 @@ export const dataService = {
   // DATEPAYS (DAILY OWNER INVESTMENT & RECONCILIATION)
   async getDatepays(shopId?: string): Promise<Datepay[]> {
     try {
-      let query = supabase.from("datepays").select("*").order("date", { ascending: false });
+      const { data, error } = await (shopId ? supabase.from("datepays").select("*").eq("shop_id", shopId).order("date", { ascending: false }) : supabase.from("datepays").select("*").order("date", { ascending: false }));
+      let query: any = { eq: () => null };
       if (shopId) query = query.eq("shop_id", shopId);
-      const { data, error } = await query;
+
       if (!error && data && data.length > 0) return data as Datepay[];
     } catch (e) {
       console.warn("Datepays fallback", e);
@@ -1361,7 +1513,7 @@ export const dataService = {
     }
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("datepays")
         .upsert([payload], { onConflict: "id" })
         .select()
@@ -1458,7 +1610,7 @@ export const dataService = {
     }
 
     try {
-      const { data, error } = await supabase.from("purchases").insert([payload]).select("*, supplier:suppliers(*)").single();
+      let { data, error } = await supabase.from("purchases").insert([payload]).select("*, supplier:suppliers(*)").single();
       if (!error && data) {
         const fullPurchase: Purchase = {
           ...data,
@@ -1509,7 +1661,7 @@ export const dataService = {
       if (!error) {
         const current = getStoredOr<Purchase[]>("chaicraft_purchases", MOCK_PURCHASES);
         const updated = current.map((p) => (p.id === purchaseId ? { ...p, stock_added: stockAdded } : p));
-        setStored("chaicraft_purchases", updated);
+        setStored(STORAGE_KEYS.PURCHASES, updated);
         return true;
       }
     } catch (e) {
@@ -1517,7 +1669,7 @@ export const dataService = {
     }
     const current = getStoredOr<Purchase[]>("chaicraft_purchases", MOCK_PURCHASES);
     const updated = current.map((p) => (p.id === purchaseId ? { ...p, stock_added: stockAdded } : p));
-    setStored("chaicraft_purchases", updated);
+    setStored(STORAGE_KEYS.PURCHASES, updated);
     return true;
   },
 
@@ -1620,10 +1772,11 @@ export const dataService = {
   // SALARIES & ATTENDANCE
   async getSalaries(shopId?: string): Promise<Salary[]> {
     try {
-      let query = supabase.from("salaries").select("*").order("created_at", { ascending: false });
+      const { data, error } = await (shopId ? supabase.from("salaries").select("*").eq("shop_id", shopId).order("created_at", { ascending: false }) : supabase.from("salaries").select("*").order("created_at", { ascending: false }));
+      let query: any = { eq: () => null };
       if (shopId) query = query.eq("shop_id", shopId);
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) {
+
+      if (!error && data) {
         return data as Salary[];
       }
       if (error) {
@@ -1632,7 +1785,9 @@ export const dataService = {
     } catch (e) {
       console.warn("Salaries query fallback", e);
     }
-    return getStoredOr(STORAGE_KEYS.SALARIES, MOCK_SALARIES);
+    const current = getStoredOr<Salary[]>(STORAGE_KEYS.SALARIES, MOCK_SALARIES);
+    if (shopId) return current.filter((s) => s.shop_id === shopId);
+    return current;
   },
 
   async recordSalaryPayment(salaryData: Partial<Salary>): Promise<Salary> {
@@ -1661,7 +1816,7 @@ export const dataService = {
     }
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from("salaries")
         .upsert([payload], { onConflict: "shop_id, employee_id, month, year" })
         .select()
@@ -1703,15 +1858,220 @@ export const dataService = {
     return newSalary;
   },
 
-  async getAttendance(shopId?: string): Promise<Attendance[]> {
+  async getAttendance(shopId?: string, dateStr?: string, userId?: string): Promise<Attendance[]> {
     try {
-      let query = supabase.from("attendance").select("*, employee:profiles(*)");
+      let query = supabase.from("attendance_history").select("*");
       if (shopId) query = query.eq("shop_id", shopId);
-      const { data, error } = await query;
-      if (!error && data && data.length > 0) return data as Attendance[];
+      if (dateStr) query = query.eq("date", dateStr);
+      if (userId) query = query.eq("user_id", userId);
+      const { data, error } = await query.order("created_at", { ascending: false });
+
+      if (!error && data && data.length > 0) {
+        return data.map((row: any) => ({
+          id: row.id,
+          shop_id: row.shop_id,
+          user_id: row.user_id,
+          employee_id: row.user_id,
+          date: row.date,
+          attendance_date: row.date,
+          in_time: row.in_time,
+          check_in: row.in_time,
+          out_time: row.out_time,
+          check_out: row.out_time,
+          total_hours: Number(row.total_hours) || 0,
+          attendance_category: (row.attendance_category as AttendanceStatus) || "PRESENT",
+          status: (row.attendance_category as AttendanceStatus) || "PRESENT",
+          notes: row.notes || "",
+          employee: row.user ? {
+            id: row.user.id,
+            shop_id: row.user.shop_id,
+            full_name: row.user.name || row.user.full_name || "Employee",
+            email: row.user.email,
+            phone: row.user.phone,
+            role: row.user.role,
+            is_active: row.user.is_active ?? true,
+            created_at: row.user.created_at || new Date().toISOString(),
+            updated_at: row.user.updated_at || new Date().toISOString(),
+          } as Profile : undefined,
+          user: row.user,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        })) as Attendance[];
+      }
+
+      let altQuery = supabase.from("attendance").select("*, employee:profiles(*)");
+      if (shopId) altQuery = altQuery.eq("shop_id", shopId);
+      if (dateStr) altQuery = altQuery.eq("attendance_date", dateStr);
+      if (userId) altQuery = altQuery.eq("employee_id", userId);
+      const altRes = await altQuery;
+      if (!altRes.error && altRes.data && altRes.data.length > 0) {
+        return altRes.data.map((row: any) => ({
+          ...row,
+          user_id: row.user_id || row.employee_id,
+          date: row.date || row.attendance_date,
+          in_time: row.in_time || row.check_in,
+          out_time: row.out_time || row.check_out,
+          attendance_category: row.attendance_category || row.status || "PRESENT",
+        })) as Attendance[];
+      }
     } catch (e) {
       console.warn("Attendance fallback", e);
     }
-    return MOCK_ATTENDANCE;
+
+    const current = getStoredOr<Attendance[]>(STORAGE_KEYS.ATTENDANCE, MOCK_ATTENDANCE);
+    let filtered = current;
+    if (shopId) filtered = filtered.filter((a) => a.shop_id === shopId);
+    if (dateStr) filtered = filtered.filter((a) => a.date === dateStr || a.attendance_date === dateStr);
+    if (userId) filtered = filtered.filter((a) => a.user_id === userId || a.employee_id === userId);
+    return filtered;
+  },
+
+  async getTodayUserAttendance(shopId: string, userId: string, dateStr?: string): Promise<Attendance | null> {
+    const targetDate = dateStr || getLocalDateStr(new Date());
+    const records = await this.getAttendance(shopId, targetDate, userId);
+    return records.length > 0 ? records[0] : null;
+  },
+
+  async recordAttendance(data: {
+    shop_id: string;
+    user_id: string;
+    date?: string;
+    in_time?: string;
+    out_time?: string;
+    attendance_category?: AttendanceStatus;
+    total_hours?: number;
+    notes?: string;
+  }): Promise<Attendance> {
+    const targetDate = data.date || getLocalDateStr(new Date());
+    const category = data.attendance_category || "PRESENT";
+
+    let hours = data.total_hours || 0;
+    if (data.in_time && data.out_time) {
+      const diffMs = new Date(data.out_time).getTime() - new Date(data.in_time).getTime();
+      if (diffMs > 0) {
+        hours = Math.round((diffMs / 3600000) * 100) / 100;
+      }
+    }
+
+    const payload: any = {
+      shop_id: data.shop_id,
+      user_id: data.user_id,
+      date: targetDate,
+      attendance_category: category,
+      notes: data.notes || "",
+      updated_at: new Date().toISOString(),
+    };
+    if (data.in_time) payload.in_time = data.in_time;
+    if (data.out_time) {
+      payload.out_time = data.out_time;
+      payload.total_hours = hours;
+    }
+
+    try {
+      const { data: resData, error } = await supabase
+        .from("attendance_history")
+        .upsert([payload], { onConflict: "shop_id, user_id, date" })
+        .select("*")
+        .single();
+
+      if (!error && resData) {
+        const item: Attendance = {
+          id: resData.id,
+          shop_id: resData.shop_id,
+          user_id: resData.user_id,
+          employee_id: resData.user_id,
+          date: resData.date,
+          attendance_date: resData.date,
+          in_time: resData.in_time,
+          check_in: resData.in_time,
+          out_time: resData.out_time,
+          check_out: resData.out_time,
+          total_hours: Number(resData.total_hours) || hours,
+          attendance_category: (resData.attendance_category as AttendanceStatus) || category,
+          status: (resData.attendance_category as AttendanceStatus) || category,
+          notes: resData.notes || "",
+          employee: resData.user ? {
+            id: resData.user.id,
+            shop_id: resData.user.shop_id,
+            full_name: resData.user.name || resData.user.full_name || "Employee",
+            email: resData.user.email,
+            phone: resData.user.phone,
+            role: resData.user.role,
+            is_active: resData.user.is_active ?? true,
+            created_at: resData.user.created_at || new Date().toISOString(),
+            updated_at: resData.user.updated_at || new Date().toISOString(),
+          } as Profile : undefined,
+          user: resData.user,
+          created_at: resData.created_at,
+          updated_at: resData.updated_at,
+        };
+
+        const current = getStoredOr<Attendance[]>(STORAGE_KEYS.ATTENDANCE, MOCK_ATTENDANCE);
+        const idx = current.findIndex(
+          (a) =>
+            a.shop_id === data.shop_id &&
+            (a.user_id === data.user_id || a.employee_id === data.user_id) &&
+            (a.date === targetDate || a.attendance_date === targetDate)
+        );
+        if (idx >= 0) {
+          const updated = [...current];
+          updated[idx] = item;
+          setStored(STORAGE_KEYS.ATTENDANCE, updated);
+        } else {
+          setStored(STORAGE_KEYS.ATTENDANCE, [item, ...current]);
+        }
+        return item;
+      }
+      if (error) {
+        console.warn("attendance_history upsert notice:", error.message);
+      }
+    } catch (e) {
+      console.warn("recordAttendance database fallback", e);
+    }
+
+    const current = getStoredOr<Attendance[]>(STORAGE_KEYS.ATTENDANCE, MOCK_ATTENDANCE);
+    const existingIndex = current.findIndex(
+      (a) =>
+        a.shop_id === data.shop_id &&
+        (a.user_id === data.user_id || a.employee_id === data.user_id) &&
+        (a.date === targetDate || a.attendance_date === targetDate)
+    );
+
+    const existing = existingIndex >= 0 ? current[existingIndex] : null;
+    const effectiveInTime = data.in_time || existing?.in_time || existing?.check_in || new Date().toISOString();
+    const effectiveOutTime = data.out_time || existing?.out_time || existing?.check_out;
+    let computedHours = hours;
+    if (effectiveInTime && effectiveOutTime) {
+      const diffMs = new Date(effectiveOutTime).getTime() - new Date(effectiveInTime).getTime();
+      if (diffMs > 0) computedHours = Math.round((diffMs / 3600000) * 100) / 100;
+    }
+
+    const newItem: Attendance = {
+      id: existing?.id || `att-${Date.now()}`,
+      shop_id: data.shop_id,
+      user_id: data.user_id,
+      employee_id: data.user_id,
+      date: targetDate,
+      attendance_date: targetDate,
+      in_time: effectiveInTime,
+      check_in: effectiveInTime,
+      out_time: effectiveOutTime,
+      check_out: effectiveOutTime,
+      total_hours: computedHours,
+      attendance_category: category,
+      status: category,
+      notes: data.notes || existing?.notes || "",
+      created_at: existing?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+
+    if (existingIndex >= 0) {
+      const updated = [...current];
+      updated[existingIndex] = newItem;
+      setStored(STORAGE_KEYS.ATTENDANCE, updated);
+    } else {
+      setStored(STORAGE_KEYS.ATTENDANCE, [newItem, ...current]);
+    }
+    return newItem;
   },
 };

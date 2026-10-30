@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { AdminLayout } from "@/layouts/AdminLayout";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -22,93 +23,185 @@ import {
   CreditCard,
   QrCode,
   Sparkles,
+  AlertCircle,
+  UserPlus,
 } from "lucide-react";
 
 export const SalaryManagement: React.FC = () => {
+  const navigate = useNavigate();
   const { shop, user } = useAuthStore();
-  const currentShopId = shop?.id || user?.shop_id;
+  const currentShopId = shop?.id || user?.shop_id || "";
 
   const [activeTab, setActiveTab] = useState<"SALARY_PAGE" | "SALARY_REPORT">("SALARY_PAGE");
 
   const [salaries, setSalaries] = useState<Salary[]>([]);
   const [employees, setEmployees] = useState<Profile[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
 
   // Disburse / Enter Salary Modal / Form state
   const [disburseModalOpen, setDisburseModalOpen] = useState(false);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState("");
   const [month, setMonth] = useState<number>(new Date().getMonth() + 1);
   const [year, setYear] = useState<number>(new Date().getFullYear());
-  const [baseSalary, setBaseSalary] = useState("22000");
-  const [bonus, setBonus] = useState("1000");
-  const [allowances, setAllowances] = useState("1500");
-  const [advancesDeducted, setAdvancesDeducted] = useState("1000");
+  const [baseSalary, setBaseSalary] = useState("");
+  const [bonus, setBonus] = useState("");
+  const [allowances, setAllowances] = useState("");
+  const [advancesDeducted, setAdvancesDeducted] = useState("");
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>("UPI_QR");
-  const [notes, setNotes] = useState("Disbursed on time via Google Pay");
+  const [notes, setNotes] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
 
-  useEffect(() => {
-    dataService.getSalaries(currentShopId).then(setSalaries);
-    dataService.getEmployees(currentShopId).then((res) => {
-      const staffOnly = res.filter((e) => e.role === "EMPLOYEE" && (!currentShopId || e.shop_id === currentShopId));
-      setEmployees(staffOnly);
-      if (staffOnly[0]) {
-        setSelectedEmployeeId(staffOnly[0].id);
-        setBaseSalary((staffOnly[0].monthly_salary || 22000).toString());
-      }
-    });
-  }, [currentShopId]);
+  // Load only salaries and employees belonging to current login user's shop_id
+  const loadData = async () => {
+    if (!currentShopId) {
+      setSalaries([]);
+      setEmployees([]);
+      return;
+    }
 
-  const handleSelectEmployee = (id: string) => {
-    setSelectedEmployeeId(id);
-    const emp = employees.find((e) => e.id === id);
-    if (emp && emp.monthly_salary) {
-      setBaseSalary(emp.monthly_salary.toString());
+    setIsLoading(true);
+    try {
+      const [salariesRes, employeesRes] = await Promise.all([
+        dataService.getSalaries(currentShopId),
+        dataService.getEmployees(currentShopId),
+      ]);
+
+      // Strictly filter employees by current shop_id
+      const staffOnly = (employeesRes || []).filter(
+        (e) => e.role === "EMPLOYEE" && e.shop_id === currentShopId
+      );
+      setEmployees(staffOnly);
+
+      // Map employee profile to salary records and strictly filter by shop_id
+      const employeeMap = new Map(staffOnly.map((e) => [e.id, e]));
+      const shopSalaries = (salariesRes || [])
+        .filter((s) => s.shop_id === currentShopId)
+        .map((s) => ({
+          ...s,
+          employee: s.employee || employeeMap.get(s.employee_id) || undefined,
+        }));
+
+      setSalaries(shopSalaries);
+    } catch (err) {
+      console.error("Error loading salary data:", err);
+      setSalaries([]);
+      setEmployees([]);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const calculatedNetPayable =
-    (parseFloat(baseSalary) || 0) +
-    (parseFloat(bonus) || 0) +
-    (parseFloat(allowances) || 0) -
-    (parseFloat(advancesDeducted) || 0);
+  useEffect(() => {
+    loadData();
+  }, [currentShopId]);
+
+  // Open modal from top button: resets all fields to clean initial state
+  const handleOpenCreateModal = () => {
+    setSelectedEmployeeId("");
+    setBaseSalary("");
+    setBonus("");
+    setAllowances("");
+    setAdvancesDeducted("");
+    setNotes("");
+    setPaymentMethod("UPI_QR");
+    setMonth(new Date().getMonth() + 1);
+    setYear(new Date().getFullYear());
+    setDisburseModalOpen(true);
+  };
+
+  // Open modal for a specific employee card
+  const handleOpenForEmployee = (emp: Profile) => {
+    setSelectedEmployeeId(emp.id);
+    setBaseSalary(emp.monthly_salary !== undefined && emp.monthly_salary !== null ? emp.monthly_salary.toString() : "0");
+    setBonus("");
+    setAllowances("");
+    setAdvancesDeducted("");
+    setNotes("");
+    setPaymentMethod("UPI_QR");
+    setMonth(new Date().getMonth() + 1);
+    setYear(new Date().getFullYear());
+    setDisburseModalOpen(true);
+  };
+
+  // Handle employee dropdown selection: auto-fills base salary from employee profile
+  const handleSelectEmployee = (id: string) => {
+    setSelectedEmployeeId(id);
+    if (!id) {
+      setBaseSalary("");
+      setBonus("");
+      setAllowances("");
+      setAdvancesDeducted("");
+      return;
+    }
+    const emp = employees.find((e) => e.id === id);
+    if (emp) {
+      setBaseSalary(emp.monthly_salary !== undefined && emp.monthly_salary !== null ? emp.monthly_salary.toString() : "0");
+      setBonus("");
+      setAllowances("");
+      setAdvancesDeducted("");
+    }
+  };
+
+  // Live calculation of net payable
+  const calculatedNetPayable = useMemo(() => {
+    if (!selectedEmployeeId) return 0;
+    const base = parseFloat(baseSalary) || 0;
+    const bon = parseFloat(bonus) || 0;
+    const allow = parseFloat(allowances) || 0;
+    const adv = parseFloat(advancesDeducted) || 0;
+    return Math.max(0, base + bon + allow - adv);
+  }, [selectedEmployeeId, baseSalary, bonus, allowances, advancesDeducted]);
 
   const handleDisburseSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedEmployeeId) return;
+    if (!selectedEmployeeId || !currentShopId) return;
     setIsProcessing(true);
 
-    const targetShopId = currentShopId || shop?.id || "a1111111-1111-1111-1111-111111111111";
     const empObj = employees.find((e) => e.id === selectedEmployeeId);
 
-    const newSal = await dataService.recordSalaryPayment({
-      shop_id: targetShopId,
-      employee_id: selectedEmployeeId,
-      month,
-      year,
-      base_salary: parseFloat(baseSalary) || 0,
-      bonus: parseFloat(bonus) || 0,
-      allowances: parseFloat(allowances) || 0,
-      advances_deducted: parseFloat(advancesDeducted) || 0,
-      other_deductions: 0,
-      net_payable: calculatedNetPayable,
-      paid_amount: calculatedNetPayable,
-      payment_status: "PAID",
-      payment_method: paymentMethod,
-      payment_date: new Date().toISOString().split("T")[0],
-      notes,
-      employee: empObj,
-    });
+    try {
+      await dataService.recordSalaryPayment({
+        shop_id: currentShopId,
+        employee_id: selectedEmployeeId,
+        month,
+        year,
+        base_salary: parseFloat(baseSalary) || 0,
+        bonus: parseFloat(bonus) || 0,
+        allowances: parseFloat(allowances) || 0,
+        advances_deducted: parseFloat(advancesDeducted) || 0,
+        other_deductions: 0,
+        net_payable: calculatedNetPayable,
+        paid_amount: calculatedNetPayable,
+        payment_status: "PAID",
+        payment_method: paymentMethod,
+        payment_date: new Date().toISOString().split("T")[0],
+        notes: notes.trim(),
+        employee: empObj,
+      });
 
-    const refreshed = await dataService.getSalaries(targetShopId);
-    setSalaries(refreshed);
-    setIsProcessing(false);
-    setDisburseModalOpen(false);
-    alert("✅ Salary disbursement record saved to database successfully!");
+      await loadData();
+      setDisburseModalOpen(false);
+      alert("✅ Salary disbursement record saved successfully!");
+    } catch (err) {
+      console.error("Disbursement save error:", err);
+      alert("Failed to save salary record. Please try again.");
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
-  const totalDisbursedThisMonth = salaries
-    .filter((s) => s.month === month && s.year === year && s.payment_status === "PAID")
-    .reduce((sum, s) => sum + s.paid_amount, 0);
+  // Summary KPI Calculations
+  const totalDisbursedThisMonth = useMemo(() => {
+    return salaries
+      .filter((s) => s.month === month && s.year === year && s.payment_status === "PAID")
+      .reduce((sum, s) => sum + (Number(s.paid_amount) || Number(s.net_payable) || 0), 0);
+  }, [salaries, month, year]);
+
+  const averageMonthlyPay = useMemo(() => {
+    if (employees.length === 0) return 0;
+    const totalBase = employees.reduce((sum, e) => sum + (Number(e.monthly_salary) || 0), 0);
+    return totalBase / employees.length;
+  }, [employees]);
 
   return (
     <AdminLayout>
@@ -126,7 +219,7 @@ export const SalaryManagement: React.FC = () => {
           <Button
             variant="primary"
             icon={<Plus className="w-4 h-4" />}
-            onClick={() => setDisburseModalOpen(true)}
+            onClick={handleOpenCreateModal}
           >
             Enter / Disburse Salary
           </Button>
@@ -139,7 +232,7 @@ export const SalaryManagement: React.FC = () => {
             className={`px-4 py-2 text-xs font-bold rounded-t-xl transition-all border-b-2 ${
               activeTab === "SALARY_PAGE"
                 ? "border-amber-600 text-amber-600 bg-amber-500/10"
-                : "border-transparent text-slate-500 hover:text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             Salary Page (Staff Compensation)
@@ -149,7 +242,7 @@ export const SalaryManagement: React.FC = () => {
             className={`px-4 py-2 text-xs font-bold rounded-t-xl transition-all border-b-2 ${
               activeTab === "SALARY_REPORT"
                 ? "border-amber-600 text-amber-600 bg-amber-500/10"
-                : "border-transparent text-slate-500 hover:text-slate-900"
+                : "border-transparent text-slate-500 hover:text-slate-900 dark:hover:text-white"
             }`}
           >
             Salary Report (Disbursement Ledger)
@@ -166,7 +259,7 @@ export const SalaryManagement: React.FC = () => {
                   Total Disbursed (Month {month}/{year})
                 </span>
                 <span className="text-2xl font-black text-emerald-700 dark:text-emerald-400 font-mono mt-1 block">
-                  {formatCurrency(totalDisbursedThisMonth || 45000)}
+                  {formatCurrency(totalDisbursedThisMonth)}
                 </span>
               </Card>
               <Card className="p-4 bg-amber-50/50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800">
@@ -182,56 +275,77 @@ export const SalaryManagement: React.FC = () => {
                   Average Monthly Pay
                 </span>
                 <span className="text-2xl font-black text-purple-700 dark:text-purple-400 font-mono mt-1 block">
-                  {formatCurrency(23000)}
+                  {formatCurrency(averageMonthlyPay)}
                 </span>
               </Card>
             </div>
 
             {/* Staff Employee Roster Cards with 1-Click Pay */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {employees.map((emp) => {
-                const isPaid = salaries.some(
-                  (s) => s.employee_id === emp.id && s.month === month && s.payment_status === "PAID"
-                );
+            {employees.length === 0 ? (
+              <Card className="p-10 text-center space-y-4 border-dashed border-2 border-slate-200 dark:border-slate-800">
+                <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 flex items-center justify-center mx-auto">
+                  <Users className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                    No Employees on Roster
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+                    There are no employees registered under your shop yet. Once you add employees, they will appear here with their compensation details.
+                  </p>
+                </div>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<UserPlus className="w-4 h-4" />}
+                  onClick={() => navigate("/admin/employees/create")}
+                >
+                  Add Employee
+                </Button>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {employees.map((emp) => {
+                  const isPaid = salaries.some(
+                    (s) => s.employee_id === emp.id && s.month === month && s.year === year && s.payment_status === "PAID"
+                  );
 
-                return (
-                  <Card key={emp.id} className="p-5 flex flex-col justify-between space-y-4">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h3 className="font-bold text-base text-slate-900 dark:text-white">
-                          {emp.full_name}
-                        </h3>
-                        <span className="text-xs text-slate-400 block">{emp.email} &bull; {emp.phone}</span>
-                        <span className="text-xs text-slate-500 mt-1 block">
-                          Location: {emp.address || "Bangalore"}, {emp.district || "Bangalore Urban"}
+                  return (
+                    <Card key={emp.id} className="p-5 flex flex-col justify-between space-y-4">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <h3 className="font-bold text-base text-slate-900 dark:text-white">
+                            {emp.full_name}
+                          </h3>
+                          <span className="text-xs text-slate-400 block">{emp.email} &bull; {emp.phone || "No phone"}</span>
+                          <span className="text-xs text-slate-500 mt-1 block">
+                            Location: {emp.address || "Main Shop"}, {emp.district || emp.state || "Branch"}
+                          </span>
+                        </div>
+                        <Badge variant={isPaid ? "success" : "warning"}>
+                          {isPaid ? "PAID THIS MONTH" : "PAYMENT PENDING"}
+                        </Badge>
+                      </div>
+
+                      <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
+                        <span className="text-slate-500 font-sans">Monthly Compensation:</span>
+                        <span className="font-black text-sm text-slate-900 dark:text-white">
+                          {formatCurrency(emp.monthly_salary || 0)}
                         </span>
                       </div>
-                      <Badge variant={isPaid ? "success" : "warning"}>
-                        {isPaid ? "PAID THIS MONTH" : "PAYMENT PENDING"}
-                      </Badge>
-                    </div>
 
-                    <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between text-xs font-mono">
-                      <span className="text-slate-500 font-sans">Monthly Compensation:</span>
-                      <span className="font-black text-sm text-slate-900 dark:text-white">
-                        {formatCurrency(emp.monthly_salary || 22000)}
-                      </span>
-                    </div>
-
-                    <Button
-                      variant={isPaid ? "secondary" : "primary"}
-                      icon={isPaid ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Banknote className="w-4 h-4" />}
-                      onClick={() => {
-                        handleSelectEmployee(emp.id);
-                        setDisburseModalOpen(true);
-                      }}
-                    >
-                      {isPaid ? "Update / Re-disburse" : "Enter & Disburse Salary"}
-                    </Button>
-                  </Card>
-                );
-              })}
-            </div>
+                      <Button
+                        variant={isPaid ? "secondary" : "primary"}
+                        icon={isPaid ? <CheckCircle className="w-4 h-4 text-emerald-600" /> : <Banknote className="w-4 h-4" />}
+                        onClick={() => handleOpenForEmployee(emp)}
+                      >
+                        {isPaid ? "Update / Re-disburse" : "Enter & Disburse Salary"}
+                      </Button>
+                    </Card>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
 
@@ -265,39 +379,47 @@ export const SalaryManagement: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {salaries.map((s) => (
-                    <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
-                      <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
-                        <div>
-                          <span>{s.employee?.full_name || "Employee"}</span>
-                          <span className="text-[11px] text-slate-400 block">{s.employee?.email}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-xs font-mono text-slate-600 dark:text-slate-400">
-                        Month {s.month} / {s.year}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">
-                        {formatCurrency(s.base_salary)}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-emerald-600 font-semibold">
-                        +{formatCurrency((s.allowances || 0) + (s.bonus || 0))}
-                      </td>
-                      <td className="px-4 py-3 font-mono text-xs text-rose-500 font-semibold">
-                        -{formatCurrency(s.advances_deducted || 0)}
-                      </td>
-                      <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 font-mono">
-                        {formatCurrency(s.net_payable)}
-                      </td>
-                      <td className="px-4 py-3 text-xs">
-                        <Badge variant="neutral">{s.payment_method || "UPI_QR"}</Badge>
-                      </td>
-                      <td className="px-4 py-3">
-                        <Badge variant={s.payment_status === "PAID" ? "success" : "warning"}>
-                          {s.payment_status}
-                        </Badge>
+                  {salaries.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="px-4 py-8 text-center text-xs text-slate-400">
+                        No salary disbursement records found for this shop.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    salaries.map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-slate-900 dark:text-white">
+                          <div>
+                            <span>{s.employee?.full_name || "Employee"}</span>
+                            <span className="text-[11px] text-slate-400 block">{s.employee?.email}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs font-mono text-slate-600 dark:text-slate-400">
+                          Month {s.month} / {s.year}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-slate-600 dark:text-slate-400">
+                          {formatCurrency(s.base_salary)}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-emerald-600 font-semibold">
+                          +{formatCurrency((s.allowances || 0) + (s.bonus || 0))}
+                        </td>
+                        <td className="px-4 py-3 font-mono text-xs text-rose-500 font-semibold">
+                          -{formatCurrency(s.advances_deducted || 0)}
+                        </td>
+                        <td className="px-4 py-3 font-black text-amber-600 dark:text-amber-400 font-mono">
+                          {formatCurrency(s.net_payable)}
+                        </td>
+                        <td className="px-4 py-3 text-xs">
+                          <Badge variant="neutral">{s.payment_method || "UPI_QR"}</Badge>
+                        </td>
+                        <td className="px-4 py-3">
+                          <Badge variant={s.payment_status === "PAID" ? "success" : "warning"}>
+                            {s.payment_status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -316,18 +438,42 @@ export const SalaryManagement: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1.5">
                 Select Staff Member *
               </label>
-              <select
-                value={selectedEmployeeId}
-                onChange={(e) => handleSelectEmployee(e.target.value)}
-                className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-medium"
-                required
-              >
-                {employees.map((e) => (
-                  <option key={e.id} value={e.id}>
-                    {e.full_name} ({e.email})
-                  </option>
-                ))}
-              </select>
+              {employees.length === 0 ? (
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 dark:text-amber-300 space-y-2">
+                  <div className="flex items-center gap-1.5 font-bold">
+                    <AlertCircle className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                    No Active Employees on Roster
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                    There are no employees registered under your shop yet. Please add employees first before recording salary disbursements.
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setDisburseModalOpen(false);
+                      navigate("/admin/employees/create");
+                    }}
+                  >
+                    Go to Add Employee
+                  </Button>
+                </div>
+              ) : (
+                <select
+                  value={selectedEmployeeId}
+                  onChange={(e) => handleSelectEmployee(e.target.value)}
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  required
+                >
+                  <option value="">-- Select Staff Member --</option>
+                  {employees.map((e) => (
+                    <option key={e.id} value={e.id}>
+                      {e.full_name} ({e.email || e.phone || "Barista"}) - {formatCurrency(e.monthly_salary || 0)}/mo
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -338,7 +484,7 @@ export const SalaryManagement: React.FC = () => {
                 <select
                   value={month}
                   onChange={(e) => setMonth(parseInt(e.target.value))}
-                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100"
+                  className="w-full rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-2 text-sm text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-amber-500"
                 >
                   {[
                     "January", "February", "March", "April", "May", "June",
@@ -364,6 +510,8 @@ export const SalaryManagement: React.FC = () => {
               type="number"
               value={baseSalary}
               onChange={(e) => setBaseSalary(e.target.value)}
+              placeholder={selectedEmployeeId ? "0" : "Select an employee first"}
+              disabled={!selectedEmployeeId}
               required
             />
 
@@ -373,12 +521,16 @@ export const SalaryManagement: React.FC = () => {
                 type="number"
                 value={bonus}
                 onChange={(e) => setBonus(e.target.value)}
+                placeholder="0"
+                disabled={!selectedEmployeeId}
               />
               <Input
                 label="Allowances (₹)"
                 type="number"
                 value={allowances}
                 onChange={(e) => setAllowances(e.target.value)}
+                placeholder="0"
+                disabled={!selectedEmployeeId}
               />
             </div>
 
@@ -387,6 +539,8 @@ export const SalaryManagement: React.FC = () => {
               type="number"
               value={advancesDeducted}
               onChange={(e) => setAdvancesDeducted(e.target.value)}
+              placeholder="0"
+              disabled={!selectedEmployeeId}
             />
 
             {/* Live Net Payable Card */}
@@ -416,7 +570,7 @@ export const SalaryManagement: React.FC = () => {
                     className={`py-2 rounded-xl text-xs font-bold border transition-all ${
                       paymentMethod === m.id
                         ? "bg-amber-600 text-white border-amber-600"
-                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700"
+                        : "bg-slate-50 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300"
                     }`}
                   >
                     {m.label}
@@ -429,14 +583,20 @@ export const SalaryManagement: React.FC = () => {
               label="Disbursement Notes"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="e.g. Paid via Google Pay on 1st of month"
+              placeholder="e.g. Paid via Google Pay for October shift wages"
             />
 
             <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
               <Button type="button" variant="secondary" onClick={() => setDisburseModalOpen(false)} className="flex-1">
                 Cancel
               </Button>
-              <Button type="submit" variant="primary" isLoading={isProcessing} className="flex-1">
+              <Button
+                type="submit"
+                variant="primary"
+                isLoading={isProcessing}
+                disabled={!selectedEmployeeId || employees.length === 0}
+                className="flex-1"
+              >
                 Disburse & Record
               </Button>
             </div>
@@ -446,4 +606,5 @@ export const SalaryManagement: React.FC = () => {
     </AdminLayout>
   );
 };
+
 export default SalaryManagement;

@@ -47,6 +47,7 @@ export const CreateShop: React.FC = () => {
   const [isLifetime, setIsLifetime] = useState(false);
   const [gstNumber, setGstNumber] = useState("");
   const [taxRate, setTaxRate] = useState("5.0");
+  const [attendanceType, setAttendanceType] = useState<"SINGLE" | "DOUBLE">("SINGLE");
   const [isActive, setIsActive] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [formError, setFormError] = useState("");
@@ -107,7 +108,8 @@ export const CreateShop: React.FC = () => {
       expiry_date: isLifetime ? undefined : expiryDate,
       is_lifetime: isLifetime,
       gst_number: gstNumber,
-      tax_rate: parseFloat(taxRate) || 5.0,
+      tax_rate: taxRate !== "" && !isNaN(parseFloat(taxRate)) ? parseFloat(taxRate) : 0,
+      attendance_type: attendanceType,
       subscription_status: "ACTIVE",
       is_active: isActive,
     });
@@ -353,8 +355,64 @@ export const CreateShop: React.FC = () => {
                 type="number"
                 value={taxRate}
                 onChange={(e) => setTaxRate(e.target.value)}
+                step="0.1"
+                min="0"
                 placeholder="5.0"
               />
+            </div>
+
+            {/* Attendance Mode Configuration */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Staff Attendance Mode *
+              </label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <label
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    attendanceType === "SINGLE"
+                      ? "border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 text-slate-900 dark:text-white shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="attendanceType"
+                    value="SINGLE"
+                    checked={attendanceType === "SINGLE"}
+                    onChange={() => setAttendanceType("SINGLE")}
+                    className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-sm font-bold block">Single Way</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Single punch per day (Mark Present / In once daily)
+                    </span>
+                  </div>
+                </label>
+
+                <label
+                  className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-all ${
+                    attendanceType === "DOUBLE"
+                      ? "border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 text-slate-900 dark:text-white shadow-sm"
+                      : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400"
+                  }`}
+                >
+                  <input
+                    type="radio"
+                    name="attendanceType"
+                    value="DOUBLE"
+                    checked={attendanceType === "DOUBLE"}
+                    onChange={() => setAttendanceType("DOUBLE")}
+                    className="mt-0.5 text-amber-600 focus:ring-amber-500"
+                  />
+                  <div>
+                    <span className="text-sm font-bold block">Double Way</span>
+                    <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Double punch per day (Clock In & Clock Out for shift duration)
+                    </span>
+                  </div>
+                </label>
+              </div>
             </div>
 
             <div className="flex gap-3 pt-4 border-t border-slate-100 dark:border-slate-800">

@@ -12,12 +12,14 @@ import { getPdfWatermarkCss, getPdfWatermarkHtml, getPdfHeaderHtml } from "@/lib
 
 export const CategoryList: React.FC = () => {
   const { shop, user } = useAuthStore();
+  const currentShopId = shop?.id || user?.shop_id || "";
+
   const [categories, setCategories] = useState<Category[]>([]);
   const [shops, setShops] = useState<Shop[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState<Category | null>(null);
 
-  const [shopId, setShopId] = useState(shop?.id || user?.shop_id || "a1111111-1111-1111-1111-111111111111");
+  const [shopId, setShopId] = useState(currentShopId);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [hasRegularThirsty, setHasRegularThirsty] = useState(false);
@@ -25,22 +27,32 @@ export const CategoryList: React.FC = () => {
   const [enableThirsty, setEnableThirsty] = useState(true);
   const [isActive, setIsActive] = useState(true);
 
-  useEffect(() => {
-    dataService.getCategories().then(setCategories);
-    dataService.getShops().then((res) => {
-      setShops(res);
-      if (res && res.length > 0) {
-        const defaultId = shop?.id || user?.shop_id || res[0].id;
-        setShopId(defaultId);
-      }
-    });
-  }, []);
+  // Load only categories for the current login user's shop_id
+  const loadCategories = async () => {
+    const targetShopId = currentShopId;
+    if (targetShopId) {
+      const data = await dataService.getCategories(targetShopId);
+      // Strictly filter to ensure no foreign shop data appears
+      const filtered = (data || []).filter((c) => !c.shop_id || c.shop_id === targetShopId);
+      setCategories(filtered);
+    } else {
+      const data = await dataService.getCategories();
+      setCategories(data || []);
+    }
+  };
 
   useEffect(() => {
-    if (shop?.id || user?.shop_id) {
-      setShopId(shop?.id || user?.shop_id || "a1111111-1111-1111-1111-111111111111");
+    if (currentShopId) {
+      setShopId(currentShopId);
     }
-  }, [shop, user]);
+    loadCategories();
+    dataService.getShops().then((res) => {
+      setShops(res || []);
+      if (!currentShopId && res && res.length > 0) {
+        setShopId(res[0].id);
+      }
+    });
+  }, [currentShopId]);
 
   const shopsMap = useMemo(() => {
     const map = new Map<string, Shop>();
@@ -53,26 +65,28 @@ export const CategoryList: React.FC = () => {
   }, [shopsMap, shopId, shop, shops]);
 
   const getShopName = (id?: string) => {
-    if (!id) return shop?.name || "Artisan Chai Store";
-    const found = shopsMap.get(id);
+    const effectiveId = id || currentShopId;
+    if (!effectiveId) return shop?.name || "Artisan Chai Store";
+    const found = shopsMap.get(effectiveId);
     if (found) return found.name;
-    if (shop && shop.id === id) return shop.name;
+    if (shop && shop.id === effectiveId) return shop.name;
     return shop?.name || "Artisan Chai Store";
   };
 
   const getShopCode = (id?: string) => {
-    if (!id) return shop?.shop_code || "";
-    const found = shopsMap.get(id);
+    const effectiveId = id || currentShopId;
+    if (!effectiveId) return shop?.shop_code || "";
+    const found = shopsMap.get(effectiveId);
     if (found) return found.shop_code;
-    if (shop && shop.id === id) return shop.shop_code;
-    return "";
+    if (shop && shop.id === effectiveId) return shop.shop_code;
+    return shop?.shop_code || "";
   };
 
   const handleOpenAdd = () => {
     setEditingCategory(null);
     setName("");
     setDescription("");
-    setShopId(shop?.id || user?.shop_id || (shops[0]?.id ?? "a1111111-1111-1111-1111-111111111111"));
+    setShopId(currentShopId || (shops[0]?.id ?? ""));
     setHasRegularThirsty(false);
     setEnableRegular(true);
     setEnableThirsty(true);
@@ -84,7 +98,7 @@ export const CategoryList: React.FC = () => {
     setEditingCategory(category);
     setName(category.name || "");
     setDescription(category.description || "");
-    setShopId(category.shop_id || shop?.id || user?.shop_id || (shops[0]?.id ?? "a1111111-1111-1111-1111-111111111111"));
+    setShopId(category.shop_id || currentShopId || (shops[0]?.id ?? ""));
     setHasRegularThirsty(!!category.has_regular_thirsty);
     const types = category.regular_thirsty_types || [];
     setEnableRegular(types.length === 0 || types.includes("Regular"));
@@ -101,7 +115,7 @@ export const CategoryList: React.FC = () => {
     if (enableRegular) types.push("Regular");
     if (enableThirsty) types.push("Thirsty");
 
-    const targetShopId = shopId || shop?.id || user?.shop_id || "a1111111-1111-1111-1111-111111111111";
+    const targetShopId = currentShopId || shopId;
 
     if (editingCategory) {
       const updatedCat = await dataService.updateCategory(editingCategory.id, {
@@ -144,7 +158,7 @@ export const CategoryList: React.FC = () => {
       await dataService.updateCategory(id, { is_active: newActive });
     } catch (err) {
       console.error("Failed to update status:", err);
-      dataService.getCategories().then(setCategories);
+      loadCategories();
     }
   };
 
@@ -168,8 +182,9 @@ export const CategoryList: React.FC = () => {
       key: "shop_id",
       header: "Shop / Branch",
       render: (c: Category) => {
-        const sName = getShopName(c.shop_id);
-        const sCode = getShopCode(c.shop_id);
+        const effectiveId = c.shop_id || currentShopId;
+        const sName = getShopName(effectiveId);
+        const sCode = getShopCode(effectiveId);
         return (
           <div className="space-y-0.5">
             <div className="flex items-center gap-1.5 font-semibold text-xs text-slate-900 dark:text-white">
@@ -181,8 +196,8 @@ export const CategoryList: React.FC = () => {
                 </span>
               )}
             </div>
-            <span className="text-[10px] font-mono text-slate-400 block pl-5" title={c.shop_id}>
-              ID: {c.shop_id ? (c.shop_id.length > 18 ? `${c.shop_id.slice(0, 8)}...${c.shop_id.slice(-4)}` : c.shop_id) : "Default Shop"}
+            <span className="text-[10px] font-mono text-slate-400 block pl-5" title={effectiveId}>
+              ID: {effectiveId ? (effectiveId.length > 18 ? `${effectiveId.slice(0, 8)}...${effectiveId.slice(-4)}` : effectiveId) : "Default Shop"}
             </span>
           </div>
         );
@@ -452,14 +467,23 @@ export const CategoryList: React.FC = () => {
                 <Building2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />
                 Target Shop / Branch
               </span>
-              {selectedShop?.shop_code && (
+              {(shop?.shop_code || selectedShop?.shop_code) && (
                 <span className="px-2 py-0.5 rounded bg-amber-500/20 text-amber-800 dark:text-amber-300 font-mono text-xs font-bold">
-                  {selectedShop.shop_code}
+                  {shop?.shop_code || selectedShop?.shop_code}
                 </span>
               )}
             </div>
 
-            {shops.length > 1 ? (
+            {currentShopId ? (
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] uppercase font-bold text-slate-400 block">Current Shop</span>
+                  <span className="text-sm font-bold text-slate-900 dark:text-white">
+                    {shop?.name || selectedShop?.name || "Artisan Chai Store"}
+                  </span>
+                </div>
+              </div>
+            ) : shops.length > 1 ? (
               <div>
                 <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-300 mb-1">
                   Select Shop Branch
@@ -490,10 +514,10 @@ export const CategoryList: React.FC = () => {
             {/* Resolved Shop ID display */}
             <div className="pt-2 border-t border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
               <span className="text-slate-500 dark:text-slate-400">
-                Shop Name (Resolved): <strong className="text-slate-900 dark:text-white">{selectedShop?.name || getShopName(shopId)}</strong>
+                Shop Name: <strong className="text-slate-900 dark:text-white">{shop?.name || selectedShop?.name || getShopName(currentShopId || shopId)}</strong>
               </span>
-              <span className="font-mono text-slate-400 text-[10px]" title={shopId}>
-                ID: {shopId}
+              <span className="font-mono text-slate-400 text-[10px]" title={currentShopId || shopId}>
+                ID: {currentShopId || shopId}
               </span>
             </div>
           </div>
@@ -588,4 +612,5 @@ export const CategoryList: React.FC = () => {
     </AdminLayout>
   );
 };
+
 export default CategoryList;

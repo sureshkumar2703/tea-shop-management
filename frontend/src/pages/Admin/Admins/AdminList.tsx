@@ -26,6 +26,9 @@ import {
   AlertCircle,
   FileSpreadsheet,
   FileText,
+  Eye,
+  EyeOff,
+  Key,
 } from "lucide-react";
 
 export const AdminList: React.FC = () => {
@@ -36,6 +39,8 @@ export const AdminList: React.FC = () => {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [showAllPasswords, setShowAllPasswords] = useState<boolean>(true);
+  const [visiblePasswords, setVisiblePasswords] = useState<Record<string, boolean>>({});
 
   const currentShopId = shop?.id || user?.shop_id;
 
@@ -190,6 +195,34 @@ export const AdminList: React.FC = () => {
       ),
     },
     {
+      key: "password",
+      header: "Password",
+      render: (u: Profile) => {
+        const isRevealed = showAllPasswords ? !visiblePasswords[u.id] : !!visiblePasswords[u.id];
+        const displayPass = u.password || u.password_hash || "Chai@123456";
+        return (
+          <div className="flex items-center gap-1.5 font-mono text-xs">
+            <span className="px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-semibold max-w-[130px] truncate select-all">
+              {isRevealed ? displayPass : "••••••••"}
+            </span>
+            <button
+              type="button"
+              onClick={() =>
+                setVisiblePasswords((prev) => ({
+                  ...prev,
+                  [u.id]: !prev[u.id],
+                }))
+              }
+              className="p-1 rounded text-slate-400 hover:text-amber-600 dark:hover:text-amber-400 transition-colors"
+              title={isRevealed ? "Hide password" : "Show password"}
+            >
+              {isRevealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            </button>
+          </div>
+        );
+      },
+    },
+    {
       key: "location",
       header: "District & State",
       render: (u: Profile) => {
@@ -252,6 +285,7 @@ export const AdminList: React.FC = () => {
       "Role",
       "Access Level",
       "Phone Number",
+      "Password",
       "District",
       "State",
       "Country",
@@ -265,6 +299,7 @@ export const AdminList: React.FC = () => {
       `"${a.role}"`,
       `"${a.role === 'OWNER' ? 'Shop Owner' : 'Co-Admin'}"`,
       `"${a.phone || '-'}"`,
+      `"${a.password || a.password_hash || ''}"`,
       `"${a.district || '-'}"`,
       `"${a.state || '-'}"`,
       `"${a.country || 'India'}"`,
@@ -305,6 +340,7 @@ export const AdminList: React.FC = () => {
           <td><strong>${a.full_name}</strong><br><small style="color: #64748b;">${a.email}</small></td>
           <td><span class="badge ${a.role === 'OWNER' ? 'owner' : 'admin'}">${a.role === 'OWNER' ? 'Shop Owner' : 'Co-Admin'}</span></td>
           <td>${a.phone || '-'}</td>
+          <td><code style="font-family: monospace; font-size: 11px; font-weight: bold; background: #f1f5f9; padding: 2px 5px; border-radius: 4px;">${a.password || a.password_hash || '••••••••'}</code></td>
           <td>${[a.district, a.state, a.country].filter(Boolean).join(", ") || '-'}</td>
           <td>${formatDate(a.created_at)}</td>
           <td><span class="badge ${a.is_active !== false ? 'active' : 'inactive'}">${a.is_active !== false ? 'ACTIVE' : 'INACTIVE'}</span></td>
@@ -370,6 +406,7 @@ export const AdminList: React.FC = () => {
               <th>Owner / Co-Admin</th>
               <th>Role & Access</th>
               <th>Phone Number</th>
+              <th>Password</th>
               <th>Location</th>
               <th>Registered Date</th>
               <th>Status</th>
@@ -392,7 +429,7 @@ export const AdminList: React.FC = () => {
 
   return (
     <AdminLayout>
-      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      <div className="md:p-8 max-w-7xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -424,6 +461,17 @@ export const AdminList: React.FC = () => {
               disabled={filteredAdmins.length === 0}
             >
               Download PDF
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              icon={showAllPasswords ? <EyeOff className="w-4 h-4 text-amber-600 dark:text-amber-400" /> : <Eye className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
+              onClick={() => {
+                setShowAllPasswords(!showAllPasswords);
+                setVisiblePasswords({});
+              }}
+            >
+              {showAllPasswords ? "Hide Passwords" : "Show Passwords"}
             </Button>
             <Button
               variant="primary"

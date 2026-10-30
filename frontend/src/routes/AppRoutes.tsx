@@ -63,6 +63,7 @@ import ShiftCash from "@/pages/Employee/Cash/ShiftCash";
 import ShiftReports from "@/pages/Employee/Reports/ShiftReports";
 import EmployeeSalaryReport from "@/pages/Employee/Salary/EmployeeSalaryReport";
 import EmployeeExpenses from "@/pages/Employee/Expenses/EmployeeExpenses";
+import EmployeeAttendance from "@/pages/Employee/Attendance/EmployeeAttendance";
 import Profile from "@/pages/Employee/Profile";
 import OnboardingScreen from "@/pages/Onboarding/OnboardingScreen";
 
@@ -172,6 +173,7 @@ export const AppRoutes: React.FC = () => {
           <Route path="/employee/cash" element={<Navigate to="/employee/dashboard" replace />} />
           <Route path="/employee/reports" element={<ShiftReports />} />
           <Route path="/employee/salary" element={<EmployeeSalaryReport />} />
+          <Route path="/employee/attendance" element={<EmployeeAttendance />} />
           <Route path="/employee/profile" element={<Profile />} />
         </Route>
       </Route>

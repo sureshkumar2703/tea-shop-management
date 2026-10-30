@@ -21,6 +21,7 @@ import {
   CheckCircle2,
   Lock,
   Calendar,
+  CalendarCheck,
   Layers,
 } from "lucide-react";
 import { CreateExpenseModal } from "@/components/modals/CreateExpenseModal";
@@ -138,6 +139,15 @@ export const AdminDashboard: React.FC = () => {
               onClick={() => setExpenseModalOpen(true)}
             >
               Log Expense
+            </Button>
+            <Link to="/admin/attendance">
+              <Button variant="outline" icon={<CalendarCheck className="w-4 h-4" />}>
+                Attendance Station
+              </Button>
+            </Link>
+            <Button
+              style={{ display: "none" }}
+            >
             </Button>
           </div>
         </div>

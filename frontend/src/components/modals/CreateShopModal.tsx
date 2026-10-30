@@ -36,6 +36,7 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
   const [email, setEmail] = useState("");
   const [gstNumber, setGstNumber] = useState("");
   const [logoUrl, setLogoUrl] = useState("");
+  const [attendanceType, setAttendanceType] = useState<"SINGLE" | "DOUBLE">("SINGLE");
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,7 +55,8 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
       gst_number: gstNumber,
       logo_url: logoUrl,
       currency: "INR",
-      tax_rate: 5.0,
+      tax_rate: 0,
+      attendance_type: attendanceType,
       subscription_status: "ACTIVE",
     });
     setIsLoading(false);
@@ -138,6 +140,60 @@ export const CreateShopModal: React.FC<CreateShopModalProps> = ({
           onChange={setLogoUrl}
           helperText={`Saved dynamically in bucket folder 'shops/${shopCode}/logo'`}
         />
+
+        {/* Attendance Mode Configuration */}
+        <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+          <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300">
+            Staff Attendance Mode *
+          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <label
+              className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                attendanceType === "SINGLE"
+                  ? "border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 text-slate-900 dark:text-white shadow-sm"
+                  : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400"
+              }`}
+            >
+              <input
+                type="radio"
+                name="modalAttendanceType"
+                value="SINGLE"
+                checked={attendanceType === "SINGLE"}
+                onChange={() => setAttendanceType("SINGLE")}
+                className="mt-0.5 text-amber-600 focus:ring-amber-500"
+              />
+              <div>
+                <span className="text-xs font-bold block">Single Way</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                  Mark Present once daily
+                </span>
+              </div>
+            </label>
+
+            <label
+              className={`flex items-start gap-2.5 p-3 rounded-xl border cursor-pointer transition-all ${
+                attendanceType === "DOUBLE"
+                  ? "border-amber-500 bg-amber-50/40 dark:bg-amber-950/20 text-slate-900 dark:text-white shadow-sm"
+                  : "border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-900 text-slate-600 dark:text-slate-400"
+              }`}
+            >
+              <input
+                type="radio"
+                name="modalAttendanceType"
+                value="DOUBLE"
+                checked={attendanceType === "DOUBLE"}
+                onChange={() => setAttendanceType("DOUBLE")}
+                className="mt-0.5 text-amber-600 focus:ring-amber-500"
+              />
+              <div>
+                <span className="text-xs font-bold block">Double Way</span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block">
+                  Clock In & Out (Shift tracking)
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
 
         <div className="flex gap-2 pt-3 border-t border-slate-100 dark:border-slate-800">
           <Button type="button" variant="secondary" onClick={onClose} className="flex-1">

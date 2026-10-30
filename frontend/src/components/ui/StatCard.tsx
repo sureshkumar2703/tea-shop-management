@@ -11,7 +11,7 @@ interface StatCardProps {
     isPositive: boolean;
   };
   subtitle?: string;
-  color?: "amber" | "emerald" | "blue" | "purple";
+  color?: "amber" | "emerald" | "blue" | "purple" | "rose";
 }
 
 export const StatCard: React.FC<StatCardProps> = ({
@@ -27,6 +27,7 @@ export const StatCard: React.FC<StatCardProps> = ({
     emerald: "bg-emerald-500/10 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400",
     blue: "bg-blue-500/10 text-blue-600 dark:bg-blue-500/20 dark:text-blue-400",
     purple: "bg-purple-500/10 text-purple-600 dark:bg-purple-500/20 dark:text-purple-400",
+    rose: "bg-rose-500/10 text-rose-600 dark:bg-rose-500/20 dark:text-rose-400",
   };
 
   return (

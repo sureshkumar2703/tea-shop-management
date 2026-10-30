@@ -50,6 +50,8 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
     orderType,
     discountAmount,
     discountReason,
+    taxRate,
+    setTaxRate,
     addItem,
     addCustomItem,
     removeItem,
@@ -98,6 +100,12 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
     dataService.getAddons(shop?.id).then(setAddons);
     refreshRegister(shop?.id);
   }, [shop?.id]);
+
+  useEffect(() => {
+    if (shop?.tax_rate !== undefined && shop?.tax_rate !== null) {
+      setTaxRate(Number(shop.tax_rate));
+    }
+  }, [shop?.tax_rate, setTaxRate]);
 
   const activeCategories = useMemo(() => {
     return categories.filter((c) => c.is_active !== false);
@@ -256,7 +264,7 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
       customer_phone: customerPhone || undefined,
       order_type: orderType,
       subtotal,
-      tax_rate: 5.0,
+      tax_rate: shop?.tax_rate !== undefined && shop?.tax_rate !== null ? Number(shop.tax_rate) : taxRate,
       tax_amount: taxAmount,
       discount_amount: discountAmount,
       discount_reason: discountReason || undefined,
@@ -663,7 +671,7 @@ export const BillingPOS: React.FC<BillingPOSProps> = ({ isEmployeeView = false }
                 <span>{formatCurrency(getSubtotal())}</span>
               </div>
               <div className="flex justify-between text-slate-500">
-                <span>Tax (GST 5%):</span>
+                <span>Tax (GST {taxRate}%):</span>
                 <span>{formatCurrency(getTaxAmount())}</span>
               </div>
               <div className="flex justify-between font-extrabold text-base text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-800">

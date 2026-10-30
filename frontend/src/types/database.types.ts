@@ -4,6 +4,7 @@ export type PaymentMethod = 'CASH' | 'UPI_QR' | 'CARD' | 'CREDIT' | 'SPLIT';
 export type OrderStatus = 'COMPLETED' | 'CANCELLED' | 'REFUNDED' | 'PENDING';
 export type StockUnit = 'KG' | 'GRAM' | 'LITER' | 'ML' | 'PIECE' | 'BOX';
 export type AttendanceStatus = 'PRESENT' | 'ABSENT' | 'HALF_DAY' | 'ON_LEAVE';
+export type AttendanceType = 'SINGLE' | 'DOUBLE';
 export type RegisterStatus = 'OPEN' | 'CLOSED';
 
 export interface Shop {
@@ -31,6 +32,7 @@ export interface Shop {
   logo_url?: string;
   gpay_qr_url?: string;
   receipt_footer?: string;
+  attendance_type?: AttendanceType;
   is_active: boolean;
   settings?: {
     allow_discounts: boolean;
@@ -320,6 +322,8 @@ export interface Salary {
   id: string;
   shop_id: string;
   employee_id: string;
+  user_id?: string;
+  date?: string;
   month: number;
   year: number;
   base_salary: number;
@@ -334,19 +338,30 @@ export interface Salary {
   payment_date?: string;
   notes?: string;
   employee?: Profile;
+  user?: Profile;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Attendance {
   id: string;
   shop_id: string;
   employee_id: string;
+  user_id?: string;
+  date?: string;
   attendance_date: string;
   check_in?: string;
+  in_time?: string;
   check_out?: string;
+  out_time?: string;
   total_hours: number;
   status: AttendanceStatus;
+  attendance_category?: AttendanceStatus;
   notes?: string;
   employee?: Profile;
+  user?: Profile;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Notification {

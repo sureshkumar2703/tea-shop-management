@@ -524,7 +524,7 @@ export const UserBillReport: React.FC = () => {
 
   return (
     <AdminLayout>
-      <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+      <div className=" max-w-7xl mx-auto space-y-6">
         {/* Header Bar */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
@@ -536,7 +536,7 @@ export const UserBillReport: React.FC = () => {
               Select any staff member, cashier, or owner to view and export their individual bill logs, collections, and sales audit.
             </p>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
             <Button
               variant="outline"
               size="sm"
@@ -559,7 +559,7 @@ export const UserBillReport: React.FC = () => {
         </div>
 
         {/* User Selection & Controls Card */}
-        <Card className="p-5 space-y-4 bg-gradient-to-r from-amber-500/5 via-transparent to-transparent border-amber-500/20">
+        <Card className="p-3.5 sm:p-5 space-y-4 bg-gradient-to-r from-amber-500/5 via-transparent to-transparent border-amber-500/20 overflow-hidden">
           <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-end">
             {/* 1. User / Cashier Selector with Searchable Input */}
             <div className="md:col-span-4 space-y-1.5">
@@ -661,37 +661,37 @@ export const UserBillReport: React.FC = () => {
 
           {/* Selected User Summary Badge Card (if single user chosen) */}
           {selectedUserObj && (
-            <div className="p-3.5 bg-amber-500/10 dark:bg-amber-500/5 rounded-xl border border-amber-500/20 flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center font-bold text-amber-700 dark:text-amber-400 text-base">
+            <div className="p-3 sm:p-4 bg-amber-500/10 dark:bg-amber-500/5 rounded-2xl border border-amber-500/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs overflow-hidden">
+              <div className="flex items-start sm:items-center gap-3 min-w-0 flex-1">
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center font-bold text-amber-700 dark:text-amber-400 text-base shrink-0">
                   {selectedUserObj.name.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-bold text-sm text-slate-900 dark:text-white">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                    <span className="font-bold text-sm text-slate-900 dark:text-white truncate max-w-[180px] sm:max-w-none">
                       {selectedUserObj.name}
                     </span>
-                    <Badge variant={selectedUserObj.role === "OWNER" ? "warning" : "neutral"}>
+                    <Badge variant={selectedUserObj.role === "OWNER" ? "warning" : "neutral"} className="shrink-0 text-[10px]">
                       {selectedUserObj.role}
                     </Badge>
                     {selectedUserObj.profile?.is_active !== false ? (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full shrink-0">
                         <CheckCircle2 className="w-3 h-3" /> Active Staff
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full">
+                      <span className="inline-flex items-center gap-1 text-[10px] text-rose-600 dark:text-rose-400 font-bold bg-rose-500/10 px-2 py-0.5 rounded-full shrink-0">
                         Inactive
                       </span>
                     )}
                   </div>
-                  <div className="flex flex-wrap items-center gap-3 text-slate-500 dark:text-slate-400 mt-1">
+                  <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-500 dark:text-slate-400 mt-1 text-[11px] sm:text-xs">
                     {selectedUserObj.phone && (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 min-w-0 break-all">
                         <Phone className="w-3 h-3" /> {selectedUserObj.phone}
                       </span>
                     )}
                     {selectedUserObj.email && (
-                      <span className="flex items-center gap-1">
+                      <span className="flex items-center gap-1 min-w-0 break-all">
                         <Mail className="w-3 h-3" /> {selectedUserObj.email}
                       </span>
                     )}
@@ -704,7 +704,7 @@ export const UserBillReport: React.FC = () => {
                 </div>
               </div>
 
-              <div className="text-right text-xs text-slate-500">
+              <div className="pt-2 sm:pt-0 border-t sm:border-t-0 border-amber-500/20 flex items-center justify-between sm:justify-end gap-1.5 text-xs text-slate-500 shrink-0">
                 <span>Matching Bills in filter: </span>
                 <strong className="text-slate-900 dark:text-white font-bold text-sm">
                   {filteredOrders.length}
@@ -716,12 +716,12 @@ export const UserBillReport: React.FC = () => {
 
         {/* Date / Period Filter Tabs */}
         <div className="space-y-3">
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 border-b border-slate-200 dark:border-slate-800">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1.5 border-b border-slate-200 dark:border-slate-800 scrollbar-none [-ms-overflow-style:none] [scrollbar-width:none]">
             {periodTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setSelectedPeriod(tab.id as FilterPeriod)}
-                className={`px-4 py-2 text-xs font-bold whitespace-nowrap rounded-xl transition-all ${
+                className={`px-3.5 sm:px-4 py-2 text-xs font-bold whitespace-nowrap rounded-xl transition-all shrink-0 ${
                   selectedPeriod === tab.id
                     ? "bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20"
                     : "bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-800"
@@ -735,7 +735,7 @@ export const UserBillReport: React.FC = () => {
           {/* Custom Date Range Picker */}
           {selectedPeriod === "CUSTOM" && (
             <div className="p-4 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-4 text-xs">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <span className="font-bold text-slate-700 dark:text-slate-300">From Date:</span>
                 <input
                   type="date"
@@ -744,7 +744,7 @@ export const UserBillReport: React.FC = () => {
                   className="bg-slate-50 dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg px-2.5 py-1.5 text-slate-800 dark:text-white"
                 />
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
                 <span className="font-bold text-slate-700 dark:text-slate-300">To Date:</span>
                 <input
                   type="date"
@@ -817,7 +817,7 @@ export const UserBillReport: React.FC = () => {
                 Line-item audit of orders, customer details, payment channels, and quick POS print/rebill actions
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
               <Button
                 variant="outline"
                 size="sm"
@@ -886,7 +886,7 @@ export const UserBillReport: React.FC = () => {
 
                         {/* 2. Time */}
                         <td className="px-3.5 py-3 whitespace-nowrap text-slate-500">
-                          <div>{formatDate(o.created_at)}</div>
+                          <div className="min-w-0 flex-1">{formatDate(o.created_at)}</div>
                           <div className="text-[10px] text-slate-400">
                             {new Date(o.created_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                           </div>
